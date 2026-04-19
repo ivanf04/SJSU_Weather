@@ -1,1 +1,7 @@
-/Users/ivan/Documents/School/Spring 2026/Math 143M/Final Project/sjsu_weather/src/main/java/com/example/App.java
+/Users/devarshshroff/weather-scraper/SJSU_Weather/sjsu_weather/src/main/java/com/weather/app/LocalCsvRepository.java
+/Users/devarshshroff/weather-scraper/SJSU_Weather/sjsu_weather/src/main/java/com/weather/app/Main.java
+/Users/devarshshroff/weather-scraper/SJSU_Weather/sjsu_weather/src/main/java/com/weather/app/SjsuWeatherFetcher.java
+/Users/devarshshroff/weather-scraper/SJSU_Weather/sjsu_weather/src/main/java/com/weather/app/WeatherDataService.java
+/Users/devarshshroff/weather-scraper/SJSU_Weather/sjsu_weather/src/main/java/com/weather/app/WeatherRecord.java
+/Users/devarshshroff/weather-scraper/SJSU_Weather/sjsu_weather/src/main/java/com/weather/app/WeatherRepository.java
+/Users/devarshshroff/weather-scraper/SJSU_Weather/sjsu_weather/src/main/java/com/weather/app/WeatherSource.java
