@@ -2,6 +2,7 @@ com/weather/app/WeatherRepository.class
 com/weather/app/WeatherDataService.class
 com/weather/app/WeatherRecord.class
 com/weather/app/LocalCsvRepository.class
+com/weather/app/WeatherDashboard.class
 com/weather/app/WeatherSource.class
 com/weather/app/SjsuWeatherFetcher.class
 com/weather/app/Main.class
