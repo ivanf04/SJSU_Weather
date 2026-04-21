@@ -102,8 +102,7 @@ public class WeatherDashboard extends Application {
     @Override
     public void start(Stage stage) {
 
-        // TODO: Replace with real implementation
-        dataProvider = null;
+        dataProvider = new LocalCsvDataProvider("sjsu_weather_backup.csv");
 
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(16));
@@ -241,7 +240,7 @@ public class WeatherDashboard extends Application {
     public void refreshLiveWeather() {
         if (dataProvider == null) return;
 
-        Task<WeatherData> task = new Task<>() {
+        Task<WeatherData> task = new Task<WeatherData>() {
             protected WeatherData call() {
                 return dataProvider.getCurrentWeather();
             }
@@ -258,7 +257,7 @@ public class WeatherDashboard extends Application {
     public void loadHistory(LocalDate start, LocalDate end) {
         if (dataProvider == null) return;
 
-        Task<List<WeatherData>> task = new Task<>() {
+        Task<List<WeatherData>> task = new Task<List<WeatherData>>() {
             protected List<WeatherData> call() {
                 return dataProvider.getHistoricalWeather(start, end);
             }
@@ -275,7 +274,7 @@ public class WeatherDashboard extends Application {
     public void loadForecast() {
         if (dataProvider == null) return;
 
-        Task<List<ForecastEntry>> task = new Task<>() {
+        Task<List<ForecastEntry>> task = new Task<List<ForecastEntry>>() {
             protected List<ForecastEntry> call() {
                 return dataProvider.getForecast();
             }
