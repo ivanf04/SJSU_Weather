@@ -1,0 +1,30 @@
+{
+  "generatedOn": "2026-04-22",
+  "forecasts": [
+    {
+      "date": "2026-04-23",
+      "predictedTemperature": 18.515,
+      "confidenceLabel": "High"
+    },
+    {
+      "date": "2026-04-24",
+      "predictedTemperature": 19.055,
+      "confidenceLabel": "High"
+    },
+    {
+      "date": "2026-04-25",
+      "predictedTemperature": 19.595000000000002,
+      "confidenceLabel": "Medium"
+    },
+    {
+      "date": "2026-04-26",
+      "predictedTemperature": 20.135,
+      "confidenceLabel": "Medium"
+    },
+    {
+      "date": "2026-04-27",
+      "predictedTemperature": 20.675,
+      "confidenceLabel": "Low"
+    }
+  ]
+}
