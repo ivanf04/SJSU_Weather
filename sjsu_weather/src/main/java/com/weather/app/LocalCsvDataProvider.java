@@ -12,40 +12,94 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * Reads weather data from the local CSV file and provides it to the dashboard.
+ * LocalCsvDataProvider
  *
- * Expected CSV column names:
- * TIMESTAMP, TMPC, RELH, SKNT, SOLR, RAIN
+ * Reads weather data from the local CSV backup file and supplies it to the UI.
+ *
+ * This class is the bridge between:
+ * - stored CSV data on disk
+ * - the JavaFX dashboard
+ *
+ * Expected CSV headers from the file:
+ * - TIMESTAMP
+ * - AirTF_Avg
+ * - RH
+ * - Rain_in_Tot
+ * - SlrW_Avg
+ * - WindSpeed_mph_avg
+ *
+ * Units in this file:
+ * - temperature: Fahrenheit
+ * - humidity: percent
+ * - wind speed: mph
+ * - solar: W/m^2
+ * - rainfall: inches
  */
 public class LocalCsvDataProvider implements DashboardDataProvider {
 
-    private static final String COL_TIMESTAMP   = "TIMESTAMP";
-    private static final String COL_TEMPERATURE = "TMPC";
-    private static final String COL_HUMIDITY    = "RELH";
-    private static final String COL_WIND_SPEED  = "SKNT";
-    private static final String COL_SOLAR       = "SOLR";
-    private static final String COL_RAINFALL    = "RAIN";
+    /* ---------- CSV column names ---------- */
 
+    /** Timestamp column */
+    private static final String COL_TIMESTAMP = "TIMESTAMP";
+
+    /** Air temperature in Fahrenheit */
+    private static final String COL_TEMPERATURE = "AirTF_Avg";
+
+    /** Relative humidity percentage */
+    private static final String COL_HUMIDITY = "RH";
+
+    /** Average wind speed in mph */
+    private static final String COL_WIND_SPEED = "WindSpeed_mph_avg";
+
+    /** Average solar radiation */
+    private static final String COL_SOLAR = "SlrW_Avg";
+
+    /** Total rainfall in inches */
+    private static final String COL_RAINFALL = "Rain_in_Tot";
+
+    /**
+     * Timestamp format used by the CSV.
+     */
     private static final DateTimeFormatter TIMESTAMP_FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /**
+     * If the latest record is older than this, mark it as stale.
+     */
     private static final int STALE_THRESHOLD_HOURS = 2;
 
+    /* ---------- Fields ---------- */
+
+    /** Path to the local CSV file */
     private final String csvFile;
+
+    /** Forecast subsystem entry point */
     private final ArchiveClass archiveClass;
 
+    /**
+     * Constructor
+     *
+     * @param csvFile path to the local CSV file
+     */
     public LocalCsvDataProvider(String csvFile) {
         this.csvFile = csvFile;
         this.archiveClass = new ArchiveClass();
     }
 
+    /**
+     * Returns the latest weather reading for the current weather section.
+     */
     @Override
     public WeatherData getCurrentWeather() {
         List<WeatherData> all = parseAllRecords();
-        if (all.isEmpty()) return null;
+
+        if (all.isEmpty()) {
+            return null;
+        }
 
         WeatherData latest = all.get(all.size() - 1);
 
+        // If the newest data is too old, mark it stale
         if (latest.getTimestamp() != null &&
                 latest.getTimestamp().isBefore(LocalDateTime.now().minusHours(STALE_THRESHOLD_HOURS))) {
             return rebuildWithStatus(latest, WeatherDashboard.SystemStatus.STALE);
@@ -54,51 +108,75 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return rebuildWithStatus(latest, WeatherDashboard.SystemStatus.LIVE);
     }
 
+    /**
+     * Returns weather records between the selected start and end dates.
+     */
     @Override
     public List<WeatherData> getHistoricalWeather(LocalDate startDate, LocalDate endDate) {
         return parseAllRecords().stream()
                 .filter(w -> w.getTimestamp() != null)
                 .filter(w -> {
-                    LocalDate d = w.getTimestamp().toLocalDate();
-                    return !d.isBefore(startDate) && !d.isAfter(endDate);
+                    LocalDate date = w.getTimestamp().toLocalDate();
+                    return !date.isBefore(startDate) && !date.isAfter(endDate);
                 })
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns today's readings for the daily trend chart.
+     */
     @Override
     public List<WeatherData> getDailyTrend() {
         LocalDate today = LocalDate.now();
+
         return parseAllRecords().stream()
                 .filter(w -> w.getTimestamp() != null)
                 .filter(w -> w.getTimestamp().toLocalDate().equals(today))
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns the last 7 days of readings for the weekly trend chart.
+     */
     @Override
     public List<WeatherData> getWeeklyTrend() {
         LocalDate weekStart = LocalDate.now().minusDays(6);
+
         return parseAllRecords().stream()
                 .filter(w -> w.getTimestamp() != null)
                 .filter(w -> !w.getTimestamp().toLocalDate().isBefore(weekStart))
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Computes today's high and low temperature for the dashboard summary.
+     */
     @Override
     public DailySummary getDailySummary() {
         List<WeatherData> today = getDailyTrend();
+
         if (today.isEmpty()) {
             return new DailySummary(0, 0);
         }
 
-        double high = today.stream().mapToDouble(WeatherData::getTemperature).max().orElse(0);
-        double low  = today.stream().mapToDouble(WeatherData::getTemperature).min().orElse(0);
+        double high = today.stream()
+                .mapToDouble(WeatherData::getTemperature)
+                .max()
+                .orElse(0);
+
+        double low = today.stream()
+                .mapToDouble(WeatherData::getTemperature)
+                .min()
+                .orElse(0);
+
         return new DailySummary(high, low);
     }
 
     /**
-     * Uses the full forecast pipeline:
-     * ArchiveClass -> ForecastCache -> PredictionEngine ->
-     * TemperatureAggregator + LinearTrendCalculator + ConfidenceEvaluator
+     * Returns forecast data using the forecast subsystem.
+     *
+     * Flow:
+     * historical WeatherData -> ArchiveClass -> cache or PredictionEngine
      */
     @Override
     public List<ForecastEntry> getForecast() {
@@ -106,58 +184,84 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return archiveClass.getForecast(historical);
     }
 
+    /**
+     * Reads every row in the CSV file and converts it into WeatherData objects.
+     */
     private List<WeatherData> parseAllRecords() {
-        List<WeatherData> result = new ArrayList<>();
+        List<WeatherData> results = new ArrayList<>();
 
         try (BufferedReader reader = new BufferedReader(new FileReader(csvFile))) {
+
+            // Read header row first
             String headerLine = reader.readLine();
-            if (headerLine == null) return result;
+            if (headerLine == null) {
+                return results;
+            }
 
             String[] headers = headerLine.replace("\"", "").split(",");
+
             String line;
-
             while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) continue;
-
-                String[] cols = line.replace("\"", "").split(",");
-                WeatherRecord record = new WeatherRecord();
-
-                for (int i = 0; i < headers.length; i++) {
-                    record.setValue(headers[i].trim(), i < cols.length ? cols[i].trim() : "");
+                if (line.trim().isEmpty()) {
+                    continue;
                 }
 
+                String[] values = line.replace("\"", "").split(",");
+
+                // Convert one CSV row into a WeatherRecord
+                WeatherRecord record = new WeatherRecord();
+                for (int i = 0; i < headers.length; i++) {
+                    String header = headers[i].trim();
+                    String value = i < values.length ? values[i].trim() : "";
+                    record.setValue(header, value);
+                }
+
+                // Convert raw record into typed WeatherData
                 WeatherData data = toWeatherData(record);
-                if (data != null) result.add(data);
+                if (data != null) {
+                    results.add(data);
+                }
             }
+
         } catch (IOException e) {
-            System.err.println("CSV read error: " + e.getMessage());
+            System.err.println("CSV read error: " + csvFile + " (" + e.getMessage() + ")");
         }
 
-        return result;
+        return results;
     }
 
+    /**
+     * Converts one raw WeatherRecord into one typed WeatherData object.
+     */
     private WeatherData toWeatherData(WeatherRecord record) {
-        String tsStr = record.getValue(COL_TIMESTAMP);
-        LocalDateTime timestamp;
 
+        String timestampText = record.getValue(COL_TIMESTAMP);
+        if (timestampText == null || timestampText.isBlank()) {
+            return null;
+        }
+
+        LocalDateTime timestamp;
         try {
-            timestamp = LocalDateTime.parse(tsStr, TIMESTAMP_FMT);
+            timestamp = LocalDateTime.parse(timestampText, TIMESTAMP_FMT);
         } catch (DateTimeParseException e) {
             return null;
         }
 
-        double tempC    = parseDouble(record.getValue(COL_TEMPERATURE));
-        double humidity = parseDouble(record.getValue(COL_HUMIDITY));
-        double wind     = parseDouble(record.getValue(COL_WIND_SPEED));
-        double solar    = parseDouble(record.getValue(COL_SOLAR));
-        double rainfall = parseDouble(record.getValue(COL_RAINFALL));
-        double feelsLike = computeFeelsLike(tempC, humidity, wind);
+        // Read numeric values directly from the real CSV columns
+        double temperature = parseDouble(record.getValue(COL_TEMPERATURE)); // °F
+        double humidity = parseDouble(record.getValue(COL_HUMIDITY));       // %
+        double windSpeed = parseDouble(record.getValue(COL_WIND_SPEED));    // mph
+        double solar = parseDouble(record.getValue(COL_SOLAR));             // W/m^2
+        double rainfall = parseDouble(record.getValue(COL_RAINFALL));       // in
+
+        // Compute feels-like temperature in Fahrenheit
+        double feelsLike = computeFeelsLikeFahrenheit(temperature, humidity, windSpeed);
 
         return new WeatherData(
-                tempC,
+                temperature,
                 feelsLike,
                 humidity,
-                wind,
+                windSpeed,
                 solar,
                 rainfall,
                 timestamp,
@@ -167,14 +271,30 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
     }
 
     /**
-     * Returns feels-like temperature in °C.
+     * Safely parses a number from text.
+     * Returns 0.0 if parsing fails.
      */
-    private double computeFeelsLike(double tempC, double humidity, double windKnots) {
-        double tempF = celsiusToFahrenheit(tempC);
-        double windMph = windKnots * 1.15078;
+    private double parseDouble(String text) {
+        try {
+            return Double.parseDouble(text);
+        } catch (Exception e) {
+            return 0.0;
+        }
+    }
 
+    /**
+     * Computes "feels like" temperature in Fahrenheit.
+     *
+     * Rules:
+     * - Use heat index when hot and humid
+     * - Use wind chill when cold and windy
+     * - Otherwise use actual temperature
+     */
+    private double computeFeelsLikeFahrenheit(double tempF, double humidity, double windMph) {
+
+        // Heat index for hot/humid weather
         if (tempF >= 80 && humidity >= 40) {
-            double hi = -42.379
+            return -42.379
                     + 2.04901523 * tempF
                     + 10.14333127 * humidity
                     - 0.22475541 * tempF * humidity
@@ -183,46 +303,32 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
                     + 0.00122874 * tempF * tempF * humidity
                     + 0.00085282 * tempF * humidity * humidity
                     - 0.00000199 * tempF * tempF * humidity * humidity;
-            return fahrenheitToCelsius(hi);
         }
 
+        // Wind chill for cold/windy weather
         if (tempF <= 50 && windMph > 3) {
-            double wc = 35.74
+            return 35.74
                     + 0.6215 * tempF
                     - 35.75 * Math.pow(windMph, 0.16)
                     + 0.4275 * tempF * Math.pow(windMph, 0.16);
-            return fahrenheitToCelsius(wc);
         }
 
-        return tempC;
+        return tempF;
     }
 
-    private double parseDouble(String s) {
-        try {
-            return Double.parseDouble(s);
-        } catch (NumberFormatException e) {
-            return 0.0;
-        }
-    }
-
-    private double celsiusToFahrenheit(double c) {
-        return c * 9.0 / 5.0 + 32;
-    }
-
-    private double fahrenheitToCelsius(double f) {
-        return (f - 32) * 5.0 / 9.0;
-    }
-
-    private WeatherData rebuildWithStatus(WeatherData src, WeatherDashboard.SystemStatus status) {
+    /**
+     * Creates a copy of a WeatherData object with a different status.
+     */
+    private WeatherData rebuildWithStatus(WeatherData source, WeatherDashboard.SystemStatus status) {
         return new WeatherData(
-                src.getTemperature(),
-                src.getFeelsLike(),
-                src.getHumidity(),
-                src.getWindSpeed(),
-                src.getSolarIrradiance(),
-                src.getRainfall(),
-                src.getTimestamp(),
-                src.isCached(),
+                source.getTemperature(),
+                source.getFeelsLike(),
+                source.getHumidity(),
+                source.getWindSpeed(),
+                source.getSolarIrradiance(),
+                source.getRainfall(),
+                source.getTimestamp(),
+                source.isCached(),
                 status
         );
     }
