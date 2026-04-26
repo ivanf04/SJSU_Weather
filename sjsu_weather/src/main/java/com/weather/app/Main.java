@@ -1,5 +1,8 @@
 package com.weather.app;
 
+import java.nio.file.Path;
+import java.nio.file.Paths;
+
 import javafx.application.Application;
 
 /**
@@ -11,15 +14,18 @@ import javafx.application.Application;
  */
 public class Main {
     public static void main(String[] args) {
+        Path csvPath = Paths.get(System.getProperty("user.dir"),"sjsu_weather_backup.csv")
+                .toAbsolutePath();
+
+        System.out.println("Using CSV file: " + csvPath);
+
         WeatherDataService app = new WeatherDataService(
             new SjsuWeatherFetcher("https://www.met.sjsu.edu/weather/sfcdata/data/DHRoof/"),
-            new LocalCsvRepository("sjsu_weather_backup.csv")
+            new LocalCsvRepository(csvPath.toString())
         );
 
-        // Pull latest backend data into local storage first
         app.runSync();
 
-        // Then launch the frontend
         Application.launch(WeatherDashboard.class, args);
     }
 }

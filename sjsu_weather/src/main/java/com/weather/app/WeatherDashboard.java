@@ -99,32 +99,38 @@ public class WeatherDashboard extends Application {
     /** Formatter used for displaying dates */
     private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
+    
     /**
      * Entry point for JavaFX app.
      */
     @Override
     public void start(Stage stage) {
-        dataProvider = new LocalCsvDataProvider("sjsu_weather_backup.csv");
+    String csvPath = java.nio.file.Paths
+            .get(System.getProperty("user.dir"), "sjsu_weather_backup.csv")
+            .toAbsolutePath()
+            .toString();
 
-        BorderPane root = new BorderPane();
-        root.setPadding(new Insets(16));
+    System.out.println("Dashboard using CSV file: " + csvPath);
 
-        root.setTop(buildTopSection());
-        root.setCenter(buildCenterSection());
+    dataProvider = new LocalCsvDataProvider(csvPath);
 
-        initializeDefaults();
+    BorderPane root = new BorderPane();
+    root.setPadding(new Insets(16));
+    root.setTop(buildTopSection());
+    root.setCenter(buildCenterSection());
 
-        Scene scene = new Scene(root, 1500, 940);
-        stage.setTitle("SJSU Weather Dashboard");
-        stage.setScene(scene);
-        stage.show();
+    initializeDefaults();
 
-        // Load UI data immediately after the window is shown
-        refreshLiveWeather();
-        loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
-        loadForecast();
-        loadTrendViews();
-    }
+    Scene scene = new Scene(root, 1500, 940);
+    stage.setTitle("SJSU Weather Dashboard");
+    stage.setScene(scene);
+    stage.show();
+
+    refreshLiveWeather();
+    loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
+    loadForecast();
+    loadTrendViews();
+}
 
     /**
      * Builds top section (status + current weather cards).
