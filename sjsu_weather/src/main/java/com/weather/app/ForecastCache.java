@@ -1,11 +1,5 @@
 package com.weather.app;
 
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonSerializer;
-import com.google.gson.reflect.TypeToken;
-
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -14,6 +8,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDate;
+
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonDeserializer;
+import com.google.gson.JsonSerializer;
+import com.google.gson.reflect.TypeToken;
 
 /**
  *
@@ -38,21 +38,27 @@ public class ForecastCache {
     private final Path cachePath;
     private final Gson gson;
 
+    /**
+     * Default constructor using forecast_cache.json.
+     */
     public ForecastCache() {
         this(DEFAULT_CACHE_PATH);
     }
 
     /**
-     * Will help with unit testing the class 
+     * Constructor with custom path, useful for testing.
      */
     public ForecastCache(String filePath) {
         this.cachePath = Paths.get(filePath);
-        this.gson      = buildGson();
+        this.gson = buildGson();
     }
 
+    /**
+     * Loads cached forecast data from disk.
+     * Returns null if the file does not exist or cannot be read.
+     */
     public CacheEntry load() {
         if (!Files.exists(cachePath)) {
-            System.out.println("No cache file found");
             return null;
         }
 
@@ -61,45 +67,42 @@ public class ForecastCache {
             CacheEntryJson raw = gson.fromJson(reader, type);
             return raw == null ? null : raw.toCacheEntry();
         } catch (IOException e) {
-            System.out.println("Failed to read cache file — will regenerate forecast.");
             return null;
         }
     }
 
-
+    /**
+     * Saves forecast data to disk.
+     */
     public void save(CacheEntry entry) {
         try (FileWriter writer = new FileWriter(cachePath.toFile())) {
             gson.toJson(CacheEntryJson.fromCacheEntry(entry), writer);
-           System.err.println("Forecast cache saved to: " + cachePath);
         } catch (IOException e) {
-            System.out.println ("Failed to write cache file — forecast will still display.");
+            System.out.println("Failed to write forecast cache.");
         }
     }
 
     /**
-     * Deletes the cache file (useful for forcing a refresh in tests).
+     * Deletes the cache file if it exists.
      */
     public void invalidate() {
         try {
             Files.deleteIfExists(cachePath);
-    
         } catch (IOException e) {
-            System.out.println( "Failed to delete cache file.");
+            System.out.println("Failed to delete forecast cache.");
         }
     }
 
-    
+    /**
+     * Builds Gson with LocalDate serialization support.
+     */
     private Gson buildGson() {
         return new GsonBuilder()
                 .registerTypeAdapter(LocalDate.class,
-                        (JsonSerializer<LocalDate>) (src, t, ctx) ->
-                                ctx.serialize(src.toString()))
+                        (JsonSerializer<LocalDate>) (src, t, ctx) -> ctx.serialize(src.toString()))
                 .registerTypeAdapter(LocalDate.class,
-                        (JsonDeserializer<LocalDate>) (json, t, ctx) ->
-                                LocalDate.parse(json.getAsString()))
+                        (JsonDeserializer<LocalDate>) (json, t, ctx) -> LocalDate.parse(json.getAsString()))
                 .setPrettyPrinting()
                 .create();
     }
-
 }
-

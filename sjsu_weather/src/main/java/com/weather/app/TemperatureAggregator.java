@@ -4,15 +4,14 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-/*
-    TemperatureAggregator
-    Responsibility: Group raw WeatherData records into chronological daily average temperatures.
-
-    Used by PredictionEngine before any trend or forecast math.
+/**
+ * Converts raw WeatherData records into daily average temperatures.
+ *
+ * Used by PredictionEngine before trend and forecast calculations.
  */
 public class TemperatureAggregator {
 
-    /*
+    /**
         Takes a list of WeatherData records and returns one average temperature per calendar day in chronological order.
         Days with no data are skipped.
 

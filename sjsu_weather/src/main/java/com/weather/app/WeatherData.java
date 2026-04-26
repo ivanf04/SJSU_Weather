@@ -4,31 +4,42 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * TEMPORARY STUB for WeatherData
- * 
- * Purpose:
- * - Provide typed fields for the UI
- * - Match what WeatherDashboard expects
+ * Typed weather model used by the UI and application layer.
+ *
+ * This class represents one processed weather reading.
+ * It is different from WeatherRecord:
+ * - WeatherRecord = raw key/value row from CSV or scraper
+ * - WeatherData   = structured object with typed fields
+ *
+ * Current units used by LocalCsvDataProvider:
+ * - temperature / feelsLike: Celsius
+ * - humidity: percent
+ * - windSpeed: knots
+ * - solarIrradiance: W/m^2
+ * - rainfall: mm
  */
 public class WeatherData {
 
+    private static final DateTimeFormatter DISPLAY_FORMAT =
+            DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
     /* ---------- Core weather fields ---------- */
 
-    private double temperature;
-    private double feelsLike;
-    private double humidity;
-    private double windSpeed;
-    private double solarIrradiance;
-    private double rainfall;
+    private final double temperature;
+    private final double feelsLike;
+    private final double humidity;
+    private final double windSpeed;
+    private final double solarIrradiance;
+    private final double rainfall;
 
     /* ---------- Metadata ---------- */
 
-    private LocalDateTime timestamp;
-    private boolean cached;
-    private WeatherDashboard.SystemStatus status;
+    private final LocalDateTime timestamp;
+    private final boolean cached;
+    private final WeatherDashboard.SystemStatus status;
 
     /**
-     * Constructor used by the UI (for now)
+     * Creates one structured weather reading.
      */
     public WeatherData(double temperature,
                        double feelsLike,
@@ -39,7 +50,6 @@ public class WeatherData {
                        LocalDateTime timestamp,
                        boolean cached,
                        WeatherDashboard.SystemStatus status) {
-
         this.temperature = temperature;
         this.feelsLike = feelsLike;
         this.humidity = humidity;
@@ -50,8 +60,6 @@ public class WeatherData {
         this.cached = cached;
         this.status = status;
     }
-
-    /* ---------- Getters (used by UI) ---------- */
 
     public double getTemperature() {
         return temperature;
@@ -90,10 +98,24 @@ public class WeatherData {
     }
 
     /**
-     * Formats timestamp for display in UI.
+     * Returns a formatted timestamp string for the UI.
      */
     public String getFormattedTimestamp() {
-        if (timestamp == null) return "--";
-        return timestamp.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+        return timestamp == null ? "--" : timestamp.format(DISPLAY_FORMAT);
+    }
+
+    @Override
+    public String toString() {
+        return "WeatherData{" +
+                "temperature=" + temperature +
+                ", feelsLike=" + feelsLike +
+                ", humidity=" + humidity +
+                ", windSpeed=" + windSpeed +
+                ", solarIrradiance=" + solarIrradiance +
+                ", rainfall=" + rainfall +
+                ", timestamp=" + timestamp +
+                ", cached=" + cached +
+                ", status=" + status +
+                '}';
     }
 }

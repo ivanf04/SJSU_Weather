@@ -2,10 +2,9 @@ package com.weather.app;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.logging.Logger;
 
 /**
- * Responsibility: Decide whether to return a cached forecast or delegate to
+ * Decide whether to return a cached forecast or delegate to
  * PredictionEngine for a fresh one.  
  *
  * Cache strategy: ONE set of predictions, rewritten each new calendar day.
@@ -16,7 +15,7 @@ import java.util.logging.Logger;
 public class ArchiveClass {
 
     private final PredictionEngine engine;
-    private final ForecastCache    cache;
+    private final ForecastCache cache;
 
     
     public ArchiveClass() {

@@ -1,13 +1,11 @@
 package com.weather.app;
 
 /**
- * TEMPORARY STUB for DailySummary
+ * Represents summary values for one day of weather data.
  *
- * Represents summary statistics for a single day.
- *
- * Example use in UI:
- * Daily High / Low: 75°F / 62°F
- *
+ * Right now the dashboard only uses high and low temperature,
+ * but this class can be extended later with average temperature,
+ * total rainfall, max wind, etc.
  */
 public class DailySummary {
 
@@ -15,25 +13,26 @@ public class DailySummary {
     private final double lowTemp;
 
     /**
-     * @param highTemp highest temperature of the day
-     * @param lowTemp lowest temperature of the day
+     * Creates a daily summary object.
      */
     public DailySummary(double highTemp, double lowTemp) {
         this.highTemp = highTemp;
         this.lowTemp = lowTemp;
     }
 
-    /**
-     * Returns the daily high temperature.
-     */
     public double getHighTemp() {
         return highTemp;
     }
 
-    /**
-     * Returns the daily low temperature.
-     */
     public double getLowTemp() {
         return lowTemp;
+    }
+
+    @Override
+    public String toString() {
+        return "DailySummary{" +
+                "highTemp=" + highTemp +
+                ", lowTemp=" + lowTemp +
+                '}';
     }
 }

@@ -3,26 +3,32 @@ package com.weather.app;
 import java.time.LocalDate;
 
 /**
- * TEMPORARY STUB for ForecastEntry
- * TO DO: Real version will use PredictionEngine later
+ * ForecastEntry
  *
- * This class represents ONE row in the forecast table in the UI.
+ * Represents one row in the forecast table.
  *
- * Example row in the UI:
+ * Used by:
+ * - PredictionEngine (to generate forecasts)
+ * - ArchiveClass (to cache forecasts)
+ * - WeatherDashboard (to display forecasts)
+ *
+ * Example:
  * Date        | Predicted Temp | Confidence
- * 2026-04-19  | 72.5°F         | High
- *
+ * 2026-04-19  | 72.5           | High
  */
 public class ForecastEntry {
 
+    /** The forecast date */
     private final LocalDate date;
+
+    /** Predicted temperature for that date */
     private final double predictedTemperature;
+
+    /** Confidence label ("High", "Medium", "Low") */
     private final String confidenceLabel;
 
     /**
-     * @param date the forecast date
-     * @param predictedTemperature predicted temperature for that day
-     * @param confidenceLabel confidence level of prediction
+     * Creates one forecast entry.
      */
     public ForecastEntry(LocalDate date,
                          double predictedTemperature,
@@ -33,24 +39,32 @@ public class ForecastEntry {
         this.confidenceLabel = confidenceLabel;
     }
 
-    /**
-     * Returns the forecast date.
-     */
     public LocalDate getDate() {
         return date;
     }
 
-    /**
-     * Returns predicted temperature value.
-     */
     public double getPredictedTemperature() {
         return predictedTemperature;
     }
 
-    /**
-     * Returns confidence label for display in UI.
-     */
     public String getConfidenceLabel() {
         return confidenceLabel;
+    }
+
+    /**
+     * Returns a formatted string for UI display.
+     * Example: "72.5"
+     */
+    public String getFormattedTemperature() {
+        return String.format("%.2f", predictedTemperature);
+    }
+
+    @Override
+    public String toString() {
+        return "ForecastEntry{" +
+                "date=" + date +
+                ", predictedTemperature=" + predictedTemperature +
+                ", confidenceLabel='" + confidenceLabel + '\'' +
+                '}';
     }
 }
