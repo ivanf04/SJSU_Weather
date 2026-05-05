@@ -1,7 +1,8 @@
-target/
-*.jar
-.vscode/
-.DS_Store
 sjsu_weather_backup.csv
-
-
+forecast_cache.json
+target/
+*.class
+target/
+*.class
+forecast_cache.json
+sjsu_weather_backup.csv
