@@ -7,10 +7,9 @@ import java.util.List;
 /**
  * Generates a multi-day temperature forecast from historical WeatherData.
  *
- * This class coordinates:
- * - TemperatureAggregator for daily averages
- * - LinearTrendCalculator for baseline and slope
- * - ConfidenceEvaluator for confidence labels
+ * This class coordinates: - TemperatureAggregator for daily averages -
+ * LinearTrendCalculator for baseline and slope - ConfidenceEvaluator for
+ * confidence labels
  */
 public class PredictionEngine {
 
@@ -53,12 +52,19 @@ public class PredictionEngine {
 
         double baseline = trendCalculator.computeWeightedMovingAverage(dailyAverages);
         double trend = trendCalculator.computeLinearTrend(dailyAverages);
-        double stdDev = confidenceEvaluator.computeStandardDeviation(dailyAverages);
+        List<Double> recent = dailyAverages.subList(
+                Math.max(0, dailyAverages.size() - 5),
+                dailyAverages.size()
+        );
 
+        double stdDev = confidenceEvaluator.computeStandardDeviation(recent);
+
+        System.out.println("Forecast stdDev = " + stdDev);
+        System.out.println("Forecast trend = " + trend);
         for (int day = 1; day <= predictionHorizon; day++) {
             LocalDate date = LocalDate.now().plusDays(day);
             double predictedTemp = baseline + (trend * day);
-            String confidence = confidenceEvaluator.evaluate(stdDev, day);
+            String confidence = confidenceEvaluator.evaluate(stdDev, trend, day);
 
             forecast.add(new ForecastEntry(date, predictedTemp, confidence));
         }

@@ -3,21 +3,15 @@ package com.weather.app;
 import java.util.List;
 
 /**
- * Evaluates forecast confidence based on:
- * - historical temperature consistency (standard deviation)
- * - how many days ahead the prediction is
+ * Evaluates forecast confidence based on: - historical temperature consistency
+ * - trend strength - how many days ahead the prediction is
  */
 public class ConfidenceEvaluator {
 
-    private static final double HIGH_CONFIDENCE_STDDEV = 2.0;
-    private static final double MEDIUM_CONFIDENCE_STDDEV = 4.0;
+    private static final double HIGH_CONFIDENCE_STDDEV = 5.0;
+    private static final double MEDIUM_CONFIDENCE_STDDEV = 8.0;
+    private static final double STRONG_TREND_THRESHOLD = 2.0;
 
-    /**
-     * Computes population standard deviation from daily average temperatures.
-     *
-     * Lower standard deviation means more stable historical temperatures,
-     * which usually means higher confidence in the forecast.
-     */
     public double computeStandardDeviation(List<Double> dailyAverages) {
         if (dailyAverages == null || dailyAverages.size() < 2) {
             return 0;
@@ -35,34 +29,22 @@ public class ConfidenceEvaluator {
         return Math.sqrt(variance);
     }
 
-    /**
-     * Returns a confidence label for a forecast day.
-     *
-     * Base confidence is determined by standard deviation:
-     * - stdDev < 2.0  -> High
-     * - stdDev < 4.0  -> Medium
-     * - stdDev >= 4.0 -> Low
-     *
-     * Then confidence is reduced for predictions farther into the future:
-     * - days 1-2: no reduction
-     * - days 3-4: reduce by 1 level
-     * - day 5+: reduce by 2 levels
-     */
-    public String evaluate(double stdDev, int daysAhead) {
+    public String evaluate(double stdDev, double trend, int daysAhead) {
         String confidence = baseConfidence(stdDev);
 
+        if (Math.abs(trend) > STRONG_TREND_THRESHOLD) {
+            confidence = degrade(confidence, 1);
+        }
+
         if (daysAhead >= 5) {
-            return degrade(confidence, 2);
+            confidence = degrade(confidence, 1);
         } else if (daysAhead >= 3) {
-            return degrade(confidence, 1);
+            confidence = degrade(confidence, 0);
         }
 
         return confidence;
     }
 
-    /**
-     * Determines the starting confidence level from standard deviation.
-     */
     private String baseConfidence(double stdDev) {
         if (stdDev < HIGH_CONFIDENCE_STDDEV) {
             return "High";
@@ -73,11 +55,6 @@ public class ConfidenceEvaluator {
         return "Low";
     }
 
-    /**
-     * Lowers confidence by the specified number of levels.
-     *
-     * High -> Medium -> Low
-     */
     private String degrade(String confidence, int levels) {
         for (int i = 0; i < levels; i++) {
             if ("High".equals(confidence)) {
