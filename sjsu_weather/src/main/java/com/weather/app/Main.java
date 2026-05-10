@@ -8,7 +8,7 @@ import javafx.application.Application;
  * Main entry point for the application.
  *
  * Flow:
- * 1. Build {@link WeatherAppComposition} (single CSV path + shared forecast stack)
+ * 1. Build WeatherAppComposition (single CSV path + shared forecast stack)
  * 2. Sync latest weather data from SJSU into that CSV
  * 3. Launch JavaFX dashboard with the provider wired from the same composition
  */
