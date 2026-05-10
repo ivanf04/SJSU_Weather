@@ -47,6 +47,17 @@ import javafx.stage.Stage;
 public class WeatherDashboard extends Application {
 
     /**
+     * Set by {@link Main} before {@link Application#launch(Class, String...)} so the UI uses the same
+     * CSV path and forecast collaborators as sync. Cleared after {@link #start(Stage)} reads it.
+     * When unset (e.g. {@code javafx:run}), {@link WeatherAppComposition#createDefault()} supplies the provider.
+     */
+    private static volatile DashboardDataProvider injectedDataProvider;
+
+    public static void setInjectedDataProvider(DashboardDataProvider provider) {
+        injectedDataProvider = provider;
+    }
+
+    /**
      * Interface used by the UI to request data.
      */
     private DashboardDataProvider dataProvider;
@@ -105,32 +116,34 @@ public class WeatherDashboard extends Application {
      */
     @Override
     public void start(Stage stage) {
-    String csvPath = java.nio.file.Paths
-            .get(System.getProperty("user.dir"), "sjsu_weather_backup.csv")
-            .toAbsolutePath()
-            .toString();
+        DashboardDataProvider injected = injectedDataProvider;
+        injectedDataProvider = null;
 
-    System.out.println("Dashboard using CSV file: " + csvPath);
+        if (injected != null) {
+            dataProvider = injected;
+        } else {
+            WeatherAppComposition composition = WeatherAppComposition.createDefault();
+            System.out.println("Dashboard using CSV file: " + composition.getCsvPath());
+            dataProvider = composition.createDashboardDataProvider();
+        }
 
-    dataProvider = new LocalCsvDataProvider(csvPath);
+        BorderPane root = new BorderPane();
+        root.setPadding(new Insets(16));
+        root.setTop(buildTopSection());
+        root.setCenter(buildCenterSection());
 
-    BorderPane root = new BorderPane();
-    root.setPadding(new Insets(16));
-    root.setTop(buildTopSection());
-    root.setCenter(buildCenterSection());
+        initializeDefaults();
 
-    initializeDefaults();
+        Scene scene = new Scene(root, 1500, 940);
+        stage.setTitle("SJSU Weather Dashboard");
+        stage.setScene(scene);
+        stage.show();
 
-    Scene scene = new Scene(root, 1500, 940);
-    stage.setTitle("SJSU Weather Dashboard");
-    stage.setScene(scene);
-    stage.show();
-
-    refreshLiveWeather();
-    loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
-    loadForecast();
-    loadTrendViews();
-}
+        refreshLiveWeather();
+        loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
+        loadForecast();
+        loadTrendViews();
+    }
 
     /**
      * Builds top section (status + current weather cards).

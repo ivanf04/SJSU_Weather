@@ -1,5 +1,6 @@
 package com.weather.app;
 
+import java.util.Collections;
 import java.util.List;
 
 public class WeatherDataService {
@@ -23,7 +24,14 @@ public class WeatherDataService {
             String rangeEnd = newOnes.get(newOnes.size() - 1).getValue("TIMESTAMP");
             System.out.println("Records from " + rangeStart + " - " + rangeEnd + ", saved on disk");
         } else {
-            System.out.println("No new data. Current range: " + (startRange.isEmpty() ? "None" : startRange + " - " + lastSeen));
+            String[] headers = source.getHeaders();
+            if (!repository.dataFileExists() && headers != null && headers.length > 0) {
+                repository.append(Collections.emptyList(), headers);
+                System.out.println("No new rows downloaded; created CSV with header row so the dashboard can open the file.");
+            } else {
+                System.out.println("No new data. Current range: "
+                        + (startRange.isEmpty() ? "None" : startRange + " - " + lastSeen));
+            }
         }
     }
 }

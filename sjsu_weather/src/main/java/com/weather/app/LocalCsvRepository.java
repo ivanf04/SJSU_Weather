@@ -17,6 +17,11 @@ public class LocalCsvRepository implements WeatherRepository {
     public LocalCsvRepository(String fileName) { this.fileName = fileName; }
 
     @Override
+    public boolean dataFileExists() {
+        return new File(fileName).exists();
+    }
+
+    @Override
     public String getFirstTimestamp() { return getTimestampAtLine(1); }
 
     @Override

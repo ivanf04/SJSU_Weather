@@ -17,18 +17,13 @@ public class ArchiveClass {
     private final PredictionEngine engine;
     private final ForecastCache cache;
 
-    
-    public ArchiveClass() {
-        this.engine = new PredictionEngine();       // 5-day horizon
-        this.cache  = new ForecastCache();          // forecast_cache.json
-    }
-
     /**
-     * Will used for testing this class 
+     * @param engine prediction logic (typically {@link PredictionEngine} default 5-day horizon)
+     * @param cache  persistence for cached forecasts (caller chooses path; app uses one beside the CSV)
      */
     public ArchiveClass(PredictionEngine engine, ForecastCache cache) {
         this.engine = engine;
-        this.cache  = cache;
+        this.cache = cache;
     }
 
     

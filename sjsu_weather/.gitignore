@@ -3,5 +3,5 @@ target/
 .vscode/
 .DS_Store
 sjsu_weather_backup.csv
-
+.class
 
