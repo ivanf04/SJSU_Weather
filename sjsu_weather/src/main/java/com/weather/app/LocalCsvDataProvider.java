@@ -16,8 +16,7 @@ import java.util.stream.Collectors;
 /**
  * Reads weather data from a local CSV file and provides it to the dashboard.
  *
- * The CSV column names are supplied by CsvWeatherSchema, so this class is not
- * locked to one exact CSV format.
+ * Uses CsvWeatherSchema so it is not tied to a specific CSV format.
  */
 public class LocalCsvDataProvider implements DashboardDataProvider {
 
@@ -33,6 +32,9 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
     private final CsvWeatherSchema schema;
     private final ArchiveClass archiveClass;
 
+    /**
+     * Cache parsed CSV rows so we don't reread file multiple times per refresh
+     */
     private List<WeatherData> cachedRecords;
 
     public LocalCsvDataProvider(String csvFile,
@@ -53,8 +55,8 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
 
         WeatherData latest = all.get(all.size() - 1);
 
-        if (latest.getTimestamp() != null
-                && latest.getTimestamp().isBefore(LocalDateTime.now().minusHours(STALE_THRESHOLD_HOURS))) {
+        if (latest.getTimestamp() != null &&
+                latest.getTimestamp().isBefore(LocalDateTime.now().minusHours(STALE_THRESHOLD_HOURS))) {
             return rebuildWithStatus(latest, SystemStatus.STALE);
         }
 
@@ -74,21 +76,25 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
 
     @Override
     public List<WeatherData> getDailyTrend() {
-        LocalDate today = LocalDate.now();
+        LocalDate latest = getLatestDate();
 
         return getAllRecords().stream()
                 .filter(w -> w.getTimestamp() != null)
-                .filter(w -> w.getTimestamp().toLocalDate().equals(today))
+                .filter(w -> w.getTimestamp().toLocalDate().equals(latest))
                 .collect(Collectors.toList());
     }
 
     @Override
     public List<WeatherData> getWeeklyTrend() {
-        LocalDate weekStart = LocalDate.now().minusDays(6);
+        LocalDate latest = getLatestDate();
+        LocalDate weekStart = latest.minusDays(6);
 
         return getAllRecords().stream()
                 .filter(w -> w.getTimestamp() != null)
-                .filter(w -> !w.getTimestamp().toLocalDate().isBefore(weekStart))
+                .filter(w -> {
+                    LocalDate d = w.getTimestamp().toLocalDate();
+                    return !d.isBefore(weekStart) && !d.isAfter(latest);
+                })
                 .collect(Collectors.toList());
     }
 
@@ -119,20 +125,30 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
     }
 
     /**
-     * Clears cached parsed records.
-     *
-     * Call this when the CSV changes and the provider should reread it.
+     * Allows manual refresh if CSV updates
      */
     public void refreshCache() {
         cachedRecords = null;
     }
 
+    /**
+     * Returns cached records or loads them if needed
+     */
     private List<WeatherData> getAllRecords() {
         if (cachedRecords == null) {
             cachedRecords = parseAllRecords();
         }
-
         return cachedRecords;
+    }
+
+    /**
+     * Get latest date from dataset instead of system clock
+     */
+    private LocalDate getLatestDate() {
+        List<WeatherData> all = getAllRecords();
+        if (all.isEmpty()) return LocalDate.now();
+
+        return all.get(all.size() - 1).getTimestamp().toLocalDate();
     }
 
     private List<WeatherData> parseAllRecords() {
@@ -143,8 +159,8 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         }
 
         try (BufferedReader reader = new BufferedReader(new FileReader(csvFile))) {
-            String headerLine = reader.readLine();
 
+            String headerLine = reader.readLine();
             if (headerLine == null) {
                 return result;
             }
@@ -154,18 +170,18 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
             }
 
             String[] headers = headerLine.replace("\"", "").split(",");
-            String line;
 
+            String line;
             while ((line = reader.readLine()) != null) {
-                if (line.trim().isEmpty()) {
-                    continue;
-                }
+                if (line.trim().isEmpty()) continue;
 
                 String[] cols = line.replace("\"", "").split(",");
+
                 WeatherRecord record = new WeatherRecord();
 
                 for (int i = 0; i < headers.length; i++) {
-                    record.setValue(headers[i].trim(), i < cols.length ? cols[i].trim() : "");
+                    record.setValue(headers[i].trim(),
+                            i < cols.length ? cols[i].trim() : "");
                 }
 
                 WeatherData data = toWeatherData(record);
@@ -173,6 +189,7 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
                     result.add(data);
                 }
             }
+
         } catch (IOException e) {
             System.err.println("CSV read error: " + e.getMessage());
         }
@@ -181,17 +198,18 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
     }
 
     private WeatherData toWeatherData(WeatherRecord record) {
-        LocalDateTime timestamp = parseTimestamp(record.getValue(schema.getTimestampColumn()));
 
-        if (timestamp == null) {
-            return null;
-        }
+        LocalDateTime timestamp = parseTimestamp(
+                record.getValue(schema.getTimestampColumn()));
+
+        if (timestamp == null) return null;
 
         double temperature = parseDouble(record.getValue(schema.getTemperatureColumn()));
         double humidity = parseDouble(record.getValue(schema.getHumidityColumn()));
         double wind = parseDouble(record.getValue(schema.getWindSpeedColumn()));
         double solar = parseDouble(record.getValue(schema.getSolarColumn()));
         double rainfall = parseDouble(record.getValue(schema.getRainfallColumn()));
+
         double feelsLike = computeFeelsLikeFahrenheit(temperature, humidity, wind);
 
         return new WeatherData(
@@ -208,38 +226,30 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
     }
 
     private static LocalDateTime parseTimestamp(String tsStr) {
-        if (tsStr == null) {
-            return null;
-        }
+        if (tsStr == null) return null;
 
-        String text = tsStr.trim();
+        String t = tsStr.trim();
+        if (t.isEmpty()) return null;
 
-        if (text.isEmpty()) {
-            return null;
-        }
-
-        for (DateTimeFormatter formatter : new DateTimeFormatter[] { TS_SPACE_SEC, TS_SPACE_MIN }) {
+        for (DateTimeFormatter fmt : new DateTimeFormatter[]{TS_SPACE_SEC, TS_SPACE_MIN}) {
             try {
-                return LocalDateTime.parse(text, formatter);
-            } catch (DateTimeParseException ignored) {
-                // Try next format.
-            }
+                return LocalDateTime.parse(t, fmt);
+            } catch (DateTimeParseException ignored) {}
         }
 
         try {
-            return LocalDateTime.parse(text, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
-        } catch (DateTimeParseException ignored) {
-            // Try date-only format.
-        }
+            return LocalDateTime.parse(t, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+        } catch (DateTimeParseException ignored) {}
 
         try {
-            return LocalDate.parse(text, DateTimeFormatter.ISO_LOCAL_DATE).atStartOfDay();
-        } catch (DateTimeParseException ignored) {
-            return null;
-        }
+            return LocalDate.parse(t).atStartOfDay();
+        } catch (DateTimeParseException ignored) {}
+
+        return null;
     }
 
     private double computeFeelsLikeFahrenheit(double tempF, double humidity, double windMph) {
+
         if (tempF >= 80 && humidity >= 40) {
             return -42.379
                     + 2.04901523 * tempF
@@ -265,7 +275,7 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
     private double parseDouble(String value) {
         try {
             return Double.parseDouble(value);
-        } catch (NumberFormatException e) {
+        } catch (Exception e) {
             return 0.0;
         }
     }
