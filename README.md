@@ -1,4 +1,4 @@
-# SJSU Weather APP
+# SJSU Campus Weather Dashboard
 
 The SJSU Campus Weather Dashboard is a JavaFX desktop application designed to provide real-time campus weather monitoring, historical trend analysis, and short-term temperature forecasting for San Jose State University. The system retrieves weather data from the Duncan Hall Roof weather station operated by the SJSU Meteorology department, stores the data locally in a CSV file, and displays it through a graphical dashboard.
 
