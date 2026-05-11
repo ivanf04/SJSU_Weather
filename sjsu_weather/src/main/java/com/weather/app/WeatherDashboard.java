@@ -30,50 +30,23 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 /**
- * Main JavaFX UI for the application.
+ * JavaFX dashboard for the SJSU Weather app.
  *
- * Responsibilities:
- * - Display current weather values
- * - Display historical data table
- * - Display daily and weekly trend graphs
- * - Display forecast results
- * - Show system status (live, cached, stale, error)
- *
- * Design notes:
- * This class is UI-only.
- * It does NOT handle scraping, CSV parsing, or data creation.
- * It depends on DashboardDataProvider for all data.
+ * This class is UI-only. It gets all data through DashboardDataProvider.
  */
 public class WeatherDashboard extends Application {
 
-    /**
-     * Set by {@link Main} before {@link Application#launch(Class, String...)} so the UI uses the same
-     * CSV path and forecast collaborators as sync. Cleared after {@link #start(Stage)} reads it.
-     * When unset (e.g. {@code javafx:run}), {@link WeatherAppComposition#createDefault()} supplies the provider.
-     */
     private static volatile DashboardDataProvider injectedDataProvider;
 
     public static void setInjectedDataProvider(DashboardDataProvider provider) {
         injectedDataProvider = provider;
     }
 
-    /**
-     * Interface used by the UI to request data.
-     */
     private DashboardDataProvider dataProvider;
 
-    /* ---------- Header/Status ---------- */
-
-    /** Displays current system state (LIVE, ERROR, etc.) */
     private Label statusLabel;
-
-    /** Displays timestamp of current data */
     private Label timestampLabel;
-
-    /** Displays daily high/low summary */
     private Label dailyHighLowLabel;
-
-    /* ---------- Current weather cards ---------- */
 
     private ValueCard temperatureCard;
     private ValueCard feelsLikeCard;
@@ -82,19 +55,11 @@ public class WeatherDashboard extends Application {
     private ValueCard solarCard;
     private ValueCard rainfallCard;
 
-    /* ---------- Buttons ---------- */
-
-    private Button refreshButton;
-    private Button retryButton;
     private Button loadHistoryButton;
     private Button refreshForecastButton;
 
-    /* ---------- Date selection ---------- */
-
     private DatePicker startDatePicker;
     private DatePicker endDatePicker;
-
-    /* ---------- Tables ---------- */
 
     private TableView<WeatherData> historyTable;
     private ObservableList<WeatherData> historyItems;
@@ -102,30 +67,14 @@ public class WeatherDashboard extends Application {
     private TableView<ForecastEntry> forecastTable;
     private ObservableList<ForecastEntry> forecastItems;
 
-    /* ---------- Charts ---------- */
-
     private WeatherTrendChart dailyTrendChart;
     private WeatherTrendChart weeklyTrendChart;
 
-    /** Formatter used for displaying dates */
     private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
-    
-    /**
-     * Entry point for JavaFX app.
-     */
     @Override
     public void start(Stage stage) {
-        DashboardDataProvider injected = injectedDataProvider;
-        injectedDataProvider = null;
-
-        if (injected != null) {
-            dataProvider = injected;
-        } else {
-            WeatherAppComposition composition = WeatherAppComposition.createDefault();
-            System.out.println("Dashboard using CSV file: " + composition.getCsvPath());
-            dataProvider = composition.createDashboardDataProvider();
-        }
+        dataProvider = resolveDataProvider();
 
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(16));
@@ -139,15 +88,22 @@ public class WeatherDashboard extends Application {
         stage.setScene(scene);
         stage.show();
 
-        refreshLiveWeather();
-        loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
-        loadForecast();
-        loadTrendViews();
+        refreshAll();
     }
 
-    /**
-     * Builds top section (status + current weather cards).
-     */
+    private DashboardDataProvider resolveDataProvider() {
+        DashboardDataProvider injected = injectedDataProvider;
+        injectedDataProvider = null;
+
+        if (injected != null) {
+            return injected;
+        }
+
+        WeatherAppComposition composition = WeatherAppComposition.createDefault();
+        System.out.println("Dashboard using CSV file: " + composition.getCsvPath());
+        return composition.createDashboardDataProvider();
+    }
+
     private VBox buildTopSection() {
         VBox root = new VBox(12);
 
@@ -160,15 +116,11 @@ public class WeatherDashboard extends Application {
 
         timestampLabel = new Label("Last updated: --");
 
-        refreshButton = new Button("Refresh");
-        retryButton = new Button("Retry");
+        Button refreshButton = new Button("Refresh");
+        Button retryButton = new Button("Retry");
 
-        refreshButton.setOnAction(e -> {
-            refreshLiveWeather();
-            loadTrendViews();
-            loadForecast();
-        });
-        retryButton.setOnAction(e -> handleRetry());
+        refreshButton.setOnAction(e -> refreshAll());
+        retryButton.setOnAction(e -> refreshAll());
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
@@ -197,9 +149,6 @@ public class WeatherDashboard extends Application {
         return root;
     }
 
-    /**
-     * Builds main center layout (split pane).
-     */
     private SplitPane buildCenterSection() {
         SplitPane split = new SplitPane();
         split.getItems().addAll(buildHistoryPane(), buildAnalysisPane());
@@ -207,9 +156,6 @@ public class WeatherDashboard extends Application {
         return split;
     }
 
-    /**
-     * Left side: historical table + date range.
-     */
     private VBox buildHistoryPane() {
         VBox root = new VBox(10);
 
@@ -217,40 +163,43 @@ public class WeatherDashboard extends Application {
         endDatePicker = new DatePicker();
 
         loadHistoryButton = new Button("Load History");
-        loadHistoryButton.setOnAction(e -> {
-            LocalDate start = startDatePicker.getValue();
-            LocalDate end = endDatePicker.getValue();
-
-            if (start == null || end == null) {
-                showError("Please select both a start date and end date.");
-                return;
-            }
-
-            if (end.isBefore(start)) {
-                showError("End date must be on or after the start date.");
-                return;
-            }
-
-            loadHistory(start, end);
-        });
+        loadHistoryButton.setOnAction(e -> loadSelectedHistory());
 
         historyTable = new TableView<>();
         historyItems = FXCollections.observableArrayList();
         historyTable.setItems(historyItems);
         configureHistoryTable();
 
-        root.getChildren().addAll(startDatePicker, endDatePicker, loadHistoryButton, historyTable);
+        root.getChildren().addAll(
+                new Label("Historical Weather Data"),
+                buildDateControls(),
+                historyTable
+        );
+
         return root;
     }
 
-    /**
-     * Right side: charts + forecast.
-     */
+    private HBox buildDateControls() {
+        HBox controls = new HBox(8);
+        controls.setAlignment(Pos.CENTER_LEFT);
+
+        controls.getChildren().addAll(
+                new Label("Start:"), startDatePicker,
+                new Label("End:"), endDatePicker,
+                loadHistoryButton
+        );
+
+        return controls;
+    }
+
     private VBox buildAnalysisPane() {
         VBox root = new VBox(10);
 
         dailyTrendChart = new WeatherTrendChart(600, 200);
+        dailyTrendChart.setMetric(WeatherMetric.TEMPERATURE);
+
         weeklyTrendChart = new WeatherTrendChart(600, 200);
+        weeklyTrendChart.setMetric(WeatherMetric.TEMPERATURE);
 
         dailyHighLowLabel = new Label("Daily High/Low: --");
 
@@ -280,29 +229,29 @@ public class WeatherDashboard extends Application {
         timestampCol.setCellValueFactory(cell ->
                 new SimpleStringProperty(cell.getValue().getFormattedTimestamp()));
 
-        TableColumn<WeatherData, String> tempCol = new TableColumn<>("Temp");
+        TableColumn<WeatherData, String> tempCol = new TableColumn<>("Temp (°F)");
         tempCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(String.format("%.2f", cell.getValue().getTemperature())));
+                new SimpleStringProperty(format(cell.getValue().getTemperature())));
 
-        TableColumn<WeatherData, String> feelsLikeCol = new TableColumn<>("Feels Like");
+        TableColumn<WeatherData, String> feelsLikeCol = new TableColumn<>("Feels Like (°F)");
         feelsLikeCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(String.format("%.2f", cell.getValue().getFeelsLike())));
+                new SimpleStringProperty(format(cell.getValue().getFeelsLike())));
 
-        TableColumn<WeatherData, String> humidityCol = new TableColumn<>("Humidity");
+        TableColumn<WeatherData, String> humidityCol = new TableColumn<>("Humidity (%)");
         humidityCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(String.format("%.2f", cell.getValue().getHumidity())));
+                new SimpleStringProperty(format(cell.getValue().getHumidity())));
 
-        TableColumn<WeatherData, String> windCol = new TableColumn<>("Wind");
+        TableColumn<WeatherData, String> windCol = new TableColumn<>("Wind (mph)");
         windCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(String.format("%.2f", cell.getValue().getWindSpeed())));
+                new SimpleStringProperty(format(cell.getValue().getWindSpeed())));
 
-        TableColumn<WeatherData, String> solarCol = new TableColumn<>("Solar");
+        TableColumn<WeatherData, String> solarCol = new TableColumn<>("Solar (W/m²)");
         solarCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(String.format("%.2f", cell.getValue().getSolarIrradiance())));
+                new SimpleStringProperty(format(cell.getValue().getSolarIrradiance())));
 
-        TableColumn<WeatherData, String> rainCol = new TableColumn<>("Rainfall");
+        TableColumn<WeatherData, String> rainCol = new TableColumn<>("Rainfall (in)");
         rainCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(String.format("%.2f", cell.getValue().getRainfall())));
+                new SimpleStringProperty(format(cell.getValue().getRainfall())));
 
         historyTable.getColumns().setAll(
                 timestampCol, tempCol, feelsLikeCol, humidityCol, windCol, solarCol, rainCol
@@ -314,9 +263,9 @@ public class WeatherDashboard extends Application {
         dateCol.setCellValueFactory(cell ->
                 new SimpleStringProperty(cell.getValue().getDate().format(dateFormatter)));
 
-        TableColumn<ForecastEntry, String> tempCol = new TableColumn<>("Predicted Temp");
+        TableColumn<ForecastEntry, String> tempCol = new TableColumn<>("Predicted Temp (°F)");
         tempCol.setCellValueFactory(cell ->
-                new SimpleStringProperty(String.format("%.2f", cell.getValue().getPredictedTemperature())));
+                new SimpleStringProperty(cell.getValue().getFormattedTemperature()));
 
         TableColumn<ForecastEntry, String> confidenceCol = new TableColumn<>("Confidence");
         confidenceCol.setCellValueFactory(cell ->
@@ -325,24 +274,44 @@ public class WeatherDashboard extends Application {
         forecastTable.getColumns().setAll(dateCol, tempCol, confidenceCol);
     }
 
-    /**
-     * Sets default date range.
-     */
     private void initializeDefaults() {
         LocalDate today = LocalDate.now();
         startDatePicker.setValue(today.minusDays(5));
         endDatePicker.setValue(today);
     }
 
-    /**
-     * Loads current weather asynchronously.
-     */
+    private void refreshAll() {
+        refreshLiveWeather();
+        loadSelectedHistory();
+        loadTrendViews();
+        loadForecast();
+    }
+
+    private void loadSelectedHistory() {
+        LocalDate start = startDatePicker.getValue();
+        LocalDate end = endDatePicker.getValue();
+
+        if (start == null || end == null) {
+            showError("Please select both a start date and end date.");
+            return;
+        }
+
+        if (end.isBefore(start)) {
+            showError("End date must be on or after the start date.");
+            return;
+        }
+
+        loadHistory(start, end);
+    }
+
     public void refreshLiveWeather() {
-        if (dataProvider == null) return;
+        if (dataProvider == null) {
+            return;
+        }
 
         setStatus(SystemStatus.LOADING, "Loading current weather...");
 
-        Task<WeatherData> task = new Task<WeatherData>() {
+        Task<WeatherData> task = new Task<>() {
             @Override
             protected WeatherData call() {
                 return dataProvider.getCurrentWeather();
@@ -352,22 +321,18 @@ public class WeatherDashboard extends Application {
         task.setOnSucceeded(e -> updateCurrentWeather(task.getValue()));
         task.setOnFailed(e -> {
             setStatus(SystemStatus.ERROR, "Failed to load current weather");
-            showError(task.getException() == null ? "Unknown error loading weather"
-                    : task.getException().getMessage());
+            showError(getErrorMessage(task));
         });
 
-        Thread thread = new Thread(task);
-        thread.setDaemon(true);
-        thread.start();
+        runInBackground(task);
     }
 
-    /**
-     * Loads historical data.
-     */
     public void loadHistory(LocalDate start, LocalDate end) {
-        if (dataProvider == null) return;
+        if (dataProvider == null) {
+            return;
+        }
 
-        Task<List<WeatherData>> task = new Task<List<WeatherData>>() {
+        Task<List<WeatherData>> task = new Task<>() {
             @Override
             protected List<WeatherData> call() {
                 return dataProvider.getHistoricalWeather(start, end);
@@ -375,21 +340,17 @@ public class WeatherDashboard extends Application {
         };
 
         task.setOnSucceeded(e -> historyItems.setAll(task.getValue()));
-        task.setOnFailed(e -> showError(task.getException() == null ? "Unknown error loading history"
-                : task.getException().getMessage()));
+        task.setOnFailed(e -> showError(getErrorMessage(task)));
 
-        Thread thread = new Thread(task);
-        thread.setDaemon(true);
-        thread.start();
+        runInBackground(task);
     }
 
-    /**
-     * Loads forecast data.
-     */
     public void loadForecast() {
-        if (dataProvider == null) return;
+        if (dataProvider == null) {
+            return;
+        }
 
-        Task<List<ForecastEntry>> task = new Task<List<ForecastEntry>>() {
+        Task<List<ForecastEntry>> task = new Task<>() {
             @Override
             protected List<ForecastEntry> call() {
                 return dataProvider.getForecast();
@@ -397,100 +358,96 @@ public class WeatherDashboard extends Application {
         };
 
         task.setOnSucceeded(e -> forecastItems.setAll(task.getValue()));
-        task.setOnFailed(e -> showError(task.getException() == null ? "Unknown error loading forecast"
-                : task.getException().getMessage()));
+        task.setOnFailed(e -> showError(getErrorMessage(task)));
 
-        Thread thread = new Thread(task);
-        thread.setDaemon(true);
-        thread.start();
+        runInBackground(task);
     }
 
-    /**
-     * Loads daily/weekly chart data and daily summary.
-     */
     public void loadTrendViews() {
-        if (dataProvider == null) return;
+        if (dataProvider == null) {
+            return;
+        }
 
-        Task<Void> task = new Task<Void>() {
+        Task<Void> task = new Task<>() {
             @Override
             protected Void call() {
                 List<WeatherData> daily = dataProvider.getDailyTrend();
                 List<WeatherData> weekly = dataProvider.getWeeklyTrend();
                 DailySummary summary = dataProvider.getDailySummary();
 
-                Platform.runLater(() -> {
-                    dailyTrendChart.setData(daily);
-                    weeklyTrendChart.setData(weekly);
-
-                    if (summary != null) {
-                        dailyHighLowLabel.setText(String.format(
-                                "Daily High/Low: %.2f / %.2f",
-                                summary.getHighTemp(),
-                                summary.getLowTemp()
-                        ));
-                    } else {
-                        dailyHighLowLabel.setText("Daily High/Low: --");
-                    }
-                });
-
+                Platform.runLater(() -> updateTrendViews(daily, weekly, summary));
                 return null;
             }
         };
 
-        task.setOnFailed(e -> showError(task.getException() == null ? "Unknown error loading trends"
-                : task.getException().getMessage()));
+        task.setOnFailed(e -> showError(getErrorMessage(task)));
 
-        Thread thread = new Thread(task);
-        thread.setDaemon(true);
-        thread.start();
+        runInBackground(task);
     }
 
-    /**
-     * Updates UI with current weather.
-     */
+    private void updateTrendViews(List<WeatherData> daily,
+                                  List<WeatherData> weekly,
+                                  DailySummary summary) {
+        dailyTrendChart.setData(daily);
+        weeklyTrendChart.setData(weekly);
+
+        if (summary == null) {
+            dailyHighLowLabel.setText("Daily High/Low: --");
+            return;
+        }
+
+        dailyHighLowLabel.setText(String.format(
+                "Daily High/Low: %.2f °F / %.2f °F",
+                summary.getHighTemp(),
+                summary.getLowTemp()
+        ));
+    }
+
     public void updateCurrentWeather(WeatherData data) {
         if (data == null) {
             setStatus(SystemStatus.ERROR, "No weather data available");
             return;
         }
 
-        temperatureCard.setValue(format(data.getTemperature()));
-        feelsLikeCard.setValue(format(data.getFeelsLike()));
-        humidityCard.setValue(format(data.getHumidity()));
-        windCard.setValue(format(data.getWindSpeed()));
-        solarCard.setValue(format(data.getSolarIrradiance()));
-        rainfallCard.setValue(format(data.getRainfall()));
+        temperatureCard.setValue(format(data.getTemperature()) + " °F");
+        feelsLikeCard.setValue(format(data.getFeelsLike()) + " °F");
+        humidityCard.setValue(format(data.getHumidity()) + " %");
+        windCard.setValue(format(data.getWindSpeed()) + " mph");
+        solarCard.setValue(format(data.getSolarIrradiance()) + " W/m²");
+        rainfallCard.setValue(format(data.getRainfall()) + " in");
 
         timestampLabel.setText("Last updated: " + data.getFormattedTimestamp());
 
-        SystemStatus status = data.getStatus();
-        if (status == null) status = SystemStatus.LIVE;
-
-        switch (status) {
-            case STALE:
-                setStatus(SystemStatus.STALE, "Data is stale");
-                break;
-            case CACHED:
-                setStatus(SystemStatus.CACHED, "Showing cached data");
-                break;
-            case ERROR:
-                setStatus(SystemStatus.ERROR, "Data error");
-                break;
-            case LOADING:
-                setStatus(SystemStatus.LOADING, "Loading");
-                break;
-            case LIVE:
-            default:
-                setStatus(SystemStatus.LIVE, "Live data loaded");
-                break;
-        }
+        SystemStatus status = data.getStatus() == null ? SystemStatus.LIVE : data.getStatus();
+        setStatus(status, getStatusMessage(status));
     }
 
-    public void handleRetry() {
-        refreshLiveWeather();
-        loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
-        loadForecast();
-        loadTrendViews();
+    private void runInBackground(Task<?> task) {
+        Thread thread = new Thread(task);
+        thread.setDaemon(true);
+        thread.start();
+    }
+
+    private String getErrorMessage(Task<?> task) {
+        return task.getException() == null
+                ? "Unknown error"
+                : task.getException().getMessage();
+    }
+
+    private String getStatusMessage(SystemStatus status) {
+        switch (status) {
+            case STALE:
+                return "Data is stale";
+            case CACHED:
+                return "Showing cached data";
+            case ERROR:
+                return "Data error";
+            case LOADING:
+                return "Loading";
+            case LIVE:
+            default:
+                return "Live data loaded";
+        }
     }
 
     private String format(double value) {
@@ -501,6 +458,7 @@ public class WeatherDashboard extends Application {
         statusLabel.setText("Status: " + message);
 
         String style = "-fx-padding: 6 10 6 10; -fx-background-radius: 6;";
+
         switch (status) {
             case LIVE:
                 style += "-fx-background-color: #d4edda; -fx-text-fill: #155724;";
@@ -519,20 +477,14 @@ public class WeatherDashboard extends Application {
                 style += "-fx-background-color: #d1ecf1; -fx-text-fill: #0c5460;";
                 break;
         }
+
         statusLabel.setStyle(style);
     }
 
-    private void showError(String msg) {
+    private void showError(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setHeaderText("Weather Dashboard Error");
-        alert.setContentText(msg);
+        alert.setContentText(message);
         alert.showAndWait();
-    }
-
-    /**
-     * Enum for UI state.
-     */
-    public enum SystemStatus {
-        LIVE, CACHED, STALE, ERROR, LOADING
     }
 }

@@ -10,11 +10,15 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.paint.Color;
 
 /**
- * Simple custom chart for plotting temperature trends from WeatherData.
+ * Simple custom chart for plotting a selected WeatherData metric.
+ *
+ * Default metric is temperature.
  */
 public class WeatherTrendChart extends StackPane {
+
     private final Canvas canvas;
     private List<WeatherData> data = new ArrayList<>();
+    private WeatherMetric metric = WeatherMetric.TEMPERATURE;
 
     public WeatherTrendChart(double width, double height) {
         canvas = new Canvas(width, height);
@@ -22,7 +26,12 @@ public class WeatherTrendChart extends StackPane {
     }
 
     public void setData(List<WeatherData> data) {
-        this.data = (data == null) ? new ArrayList<>() : data;
+        this.data = data == null ? new ArrayList<>() : data;
+        redraw();
+    }
+
+    public void setMetric(WeatherMetric metric) {
+        this.metric = metric == null ? WeatherMetric.TEMPERATURE : metric;
         redraw();
     }
 
@@ -40,12 +49,12 @@ public class WeatherTrendChart extends StackPane {
         }
 
         double min = data.stream()
-                .map(WeatherData::getTemperature)
+                .map(this::getMetricValue)
                 .min(Comparator.naturalOrder())
                 .orElse(0.0);
 
         double max = data.stream()
-                .map(WeatherData::getTemperature)
+                .map(this::getMetricValue)
                 .max(Comparator.naturalOrder())
                 .orElse(1.0);
 
@@ -67,24 +76,58 @@ public class WeatherTrendChart extends StackPane {
         gc.setFill(Color.BLACK);
         gc.fillText(String.format("%.1f", max), 5, top + 5);
         gc.fillText(String.format("%.1f", min), 5, height - bottom);
+        gc.fillText(getMetricLabel(), left + 5, top + 15);
 
         gc.setStroke(Color.BLUE);
         gc.setFill(Color.BLUE);
 
         for (int i = 0; i < data.size(); i++) {
-            double temp = data.get(i).getTemperature();
+            double value = getMetricValue(data.get(i));
 
             double x = left + (plotWidth * i / Math.max(1, data.size() - 1));
-            double y = top + plotHeight - ((temp - min) / (max - min)) * plotHeight;
+            double y = top + plotHeight - ((value - min) / (max - min)) * plotHeight;
 
             gc.fillOval(x - 2, y - 2, 4, 4);
 
             if (i > 0) {
-                double prevTemp = data.get(i - 1).getTemperature();
-                double prevX = left + (plotWidth * (i - 1) / Math.max(1, data.size() - 1));
-                double prevY = top + plotHeight - ((prevTemp - min) / (max - min)) * plotHeight;
-                gc.strokeLine(prevX, prevY, x, y);
+                double previousValue = getMetricValue(data.get(i - 1));
+                double previousX = left + (plotWidth * (i - 1) / Math.max(1, data.size() - 1));
+                double previousY = top + plotHeight - ((previousValue - min) / (max - min)) * plotHeight;
+
+                gc.strokeLine(previousX, previousY, x, y);
             }
+        }
+    }
+
+    private double getMetricValue(WeatherData point) {
+        switch (metric) {
+            case HUMIDITY:
+                return point.getHumidity();
+            case WIND_SPEED:
+                return point.getWindSpeed();
+            case SOLAR:
+                return point.getSolarIrradiance();
+            case RAINFALL:
+                return point.getRainfall();
+            case TEMPERATURE:
+            default:
+                return point.getTemperature();
+        }
+    }
+
+    private String getMetricLabel() {
+        switch (metric) {
+            case HUMIDITY:
+                return "Humidity (%)";
+            case WIND_SPEED:
+                return "Wind (mph)";
+            case SOLAR:
+                return "Solar (W/m²)";
+            case RAINFALL:
+                return "Rainfall (in)";
+            case TEMPERATURE:
+            default:
+                return "Temperature (°F)";
         }
     }
 }

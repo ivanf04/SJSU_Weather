@@ -4,26 +4,22 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
 /**
- * Typed weather model used by the UI and application layer.
+ * Typed weather model used by the app and UI.
  *
- * This class represents one processed weather reading.
- * It is different from WeatherRecord:
- * - WeatherRecord = raw key/value row from CSV or scraper
- * - WeatherData   = structured object with typed fields
+ * WeatherRecord = raw key/value CSV row.
+ * WeatherData = structured weather object used by dashboard and forecast logic.
  *
- * Current units used by LocalCsvDataProvider:
- * - temperature / feelsLike: Celsius
+ * Current units:
+ * - temperature / feelsLike: Fahrenheit
  * - humidity: percent
- * - windSpeed: knots
+ * - windSpeed: mph
  * - solarIrradiance: W/m^2
- * - rainfall: mm
+ * - rainfall: inches
  */
 public class WeatherData {
 
     private static final DateTimeFormatter DISPLAY_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-
-    /* ---------- Core weather fields ---------- */
 
     private final double temperature;
     private final double feelsLike;
@@ -32,15 +28,10 @@ public class WeatherData {
     private final double solarIrradiance;
     private final double rainfall;
 
-    /* ---------- Metadata ---------- */
-
     private final LocalDateTime timestamp;
     private final boolean cached;
-    private final WeatherDashboard.SystemStatus status;
+    private final SystemStatus status;
 
-    /**
-     * Creates one structured weather reading.
-     */
     public WeatherData(double temperature,
                        double feelsLike,
                        double humidity,
@@ -49,7 +40,7 @@ public class WeatherData {
                        double rainfall,
                        LocalDateTime timestamp,
                        boolean cached,
-                       WeatherDashboard.SystemStatus status) {
+                       SystemStatus status) {
         this.temperature = temperature;
         this.feelsLike = feelsLike;
         this.humidity = humidity;
@@ -93,13 +84,10 @@ public class WeatherData {
         return cached;
     }
 
-    public WeatherDashboard.SystemStatus getStatus() {
+    public SystemStatus getStatus() {
         return status;
     }
 
-    /**
-     * Returns a formatted timestamp string for the UI.
-     */
     public String getFormattedTimestamp() {
         return timestamp == null ? "--" : timestamp.format(DISPLAY_FORMAT);
     }

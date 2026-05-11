@@ -4,41 +4,22 @@ import java.time.LocalDate;
 import java.util.List;
 
 /**
- * Decide whether to return a cached forecast or delegate to
- * PredictionEngine for a fresh one.  
+ * Handles forecast caching.
  *
- * Cache strategy: ONE set of predictions, rewritten each new calendar day.
- * If the cache was generated today, it is returned as-is.
- * If it is stale (different date) or missing, the engine runs and the result
- * overwrites the old cache file.
+ * If today's forecast is already cached, it returns the cached result.
+ * Otherwise, it asks the configured ForecastModel to generate a fresh forecast.
  */
 public class ArchiveClass {
 
-    private final PredictionEngine engine;
+    private final ForecastModel model;
     private final ForecastCache cache;
 
-    /**
-     * @param engine prediction logic (typically {@link PredictionEngine} default 5-day horizon)
-     * @param cache  persistence for cached forecasts (caller chooses path; app uses one beside the CSV)
-     */
-    public ArchiveClass(PredictionEngine engine, ForecastCache cache) {
-        this.engine = engine;
+    public ArchiveClass(ForecastModel model, ForecastCache cache) {
+        this.model = model;
         this.cache = cache;
     }
 
-    
-    /**
-     * Returns a 5-day forecast, using the disk cache when available and fresh.
-     *
-     * Flow:
-     *  1. Load cache from disk
-     *  2. If cache exists AND was generated today > return cached forecasts
-     *  3. Otherwise > run PredictionEngine, persist result, return fresh forecasts
-     *
-     */
     public List<ForecastEntry> getForecast(List<WeatherData> historicalData) {
-
-        // --- Step 1: Try the cache first ---
         CacheEntry cached = cache.load();
 
         if (cached != null && cached.isFresh()) {
@@ -46,35 +27,23 @@ public class ArchiveClass {
             return cached.getForecasts();
         }
 
-        // --- Step 2: Cache is stale or missing — run the engine ---
-       System.out.println("Cache miss — running PredictionEngine for " + LocalDate.now());
+        System.out.println("Cache miss — running forecast model for " + LocalDate.now());
 
-        List<ForecastEntry> freshForecasts = engine.generateForecast(historicalData);
+        List<ForecastEntry> freshForecasts = model.generateForecast(historicalData);
 
-        // --- Step 3: Persist and return ---
         if (!freshForecasts.isEmpty()) {
-            CacheEntry newEntry = new CacheEntry(LocalDate.now(), freshForecasts);
-            cache.save(newEntry);
+            cache.save(new CacheEntry(LocalDate.now(), freshForecasts));
         }
 
         return freshForecasts;
     }
 
-    /**
-     * Forces the next call to getForecast() to re-run the engine by deleting
-     * the cache file.  Useful for a "Refresh" button in the GUI.
-     */
     public void invalidateCache() {
         cache.invalidate();
-        System.out.println("Cache manually invalidated — next getForecast() will recompute.");
     }
 
-    /**
-     * Returns the date the current cache was generated, or null if no valid
-     * cache exists.  Useful for displaying "Last updated: …" in the GUI.
-     */
     public LocalDate getCacheDate() {
         CacheEntry cached = cache.load();
-        return (cached != null) ? cached.getGeneratedOn() : null;
+        return cached != null ? cached.getGeneratedOn() : null;
     }
 }

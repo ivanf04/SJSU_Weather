@@ -5,29 +5,24 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Generates a multi-day temperature forecast from historical WeatherData.
+ * Default forecast model.
  *
- * This class coordinates: - TemperatureAggregator for daily averages -
- * LinearTrendCalculator for baseline and slope - ConfidenceEvaluator for
- * confidence labels
+ * Uses:
+ * - TemperatureAggregator for daily averages
+ * - LinearTrendCalculator for baseline and trend
+ * - ConfidenceEvaluator for confidence labels
  */
-public class PredictionEngine {
+public class PredictionEngine implements ForecastModel {
 
     private final int predictionHorizon;
     private final TemperatureAggregator aggregator;
     private final LinearTrendCalculator trendCalculator;
     private final ConfidenceEvaluator confidenceEvaluator;
 
-    /**
-     * Default forecast horizon = 5 days.
-     */
     public PredictionEngine() {
         this(5);
     }
 
-    /**
-     * Creates a prediction engine with a configurable horizon.
-     */
     public PredictionEngine(int predictionHorizon) {
         this.predictionHorizon = predictionHorizon;
         this.aggregator = new TemperatureAggregator();
@@ -35,9 +30,7 @@ public class PredictionEngine {
         this.confidenceEvaluator = new ConfidenceEvaluator();
     }
 
-    /**
-     * Generates forecast entries from historical weather data.
-     */
+    @Override
     public List<ForecastEntry> generateForecast(List<WeatherData> historicalData) {
         List<ForecastEntry> forecast = new ArrayList<>();
 
@@ -52,6 +45,7 @@ public class PredictionEngine {
 
         double baseline = trendCalculator.computeWeightedMovingAverage(dailyAverages);
         double trend = trendCalculator.computeLinearTrend(dailyAverages);
+
         List<Double> recent = dailyAverages.subList(
                 Math.max(0, dailyAverages.size() - 5),
                 dailyAverages.size()
@@ -59,8 +53,6 @@ public class PredictionEngine {
 
         double stdDev = confidenceEvaluator.computeStandardDeviation(recent);
 
-        System.out.println("Forecast stdDev = " + stdDev);
-        System.out.println("Forecast trend = " + trend);
         for (int day = 1; day <= predictionHorizon; day++) {
             LocalDate date = LocalDate.now().plusDays(day);
             double predictedTemp = baseline + (trend * day);

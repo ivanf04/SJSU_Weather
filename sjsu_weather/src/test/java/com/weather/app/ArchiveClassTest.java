@@ -1,9 +1,5 @@
 package com.weather.app;
 
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.time.LocalDate;
@@ -11,7 +7,15 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.AfterEach;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 
 
@@ -165,7 +169,7 @@ class ArchiveClassTest {
             LocalDateTime timestamp = LocalDate.now().minusDays(temps.length - i).atTime(12, 0);
             data.add(new WeatherData(
                 temps[i], temps[i] - 1, 65, 6.0, 150.0, 0.0,
-                timestamp, false, WeatherDashboard.SystemStatus.LIVE
+                timestamp, false, SystemStatus.LIVE
             ));
         }
         return data;
