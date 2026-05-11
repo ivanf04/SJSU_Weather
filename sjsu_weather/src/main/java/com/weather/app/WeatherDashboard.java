@@ -31,26 +31,72 @@ import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
 /**
- * Main JavaFX UI for the application.
+ * Main JavaFX UI for the weather application.
  *
- * This class is UI-only. It gets all weather data from DashboardDataProvider.
+ * Responsibilities:
+ * - Display current weather values (cards)
+ * - Display historical data (table)
+ * - Display daily and weekly trend charts
+ * - Display forecast results
+ * - Handle user interactions (date selection, refresh)
+ *
+ * Important:
+ * This class does NOT fetch or process raw data.
+ * It depends entirely on DashboardDataProvider.
  */
 public class WeatherDashboard extends Application {
 
+    /**
+     * Optional provider injected by Main before JavaFX launches.
+     *
+     * This lets Main and WeatherDashboard share the same configured app flow
+     * instead of WeatherDashboard creating a separate provider on its own.
+     */
     private static volatile DashboardDataProvider injectedDataProvider;
 
+    /**
+     * Called by Main to give the dashboard a preconfigured data provider.
+     */
     public static void setInjectedDataProvider(DashboardDataProvider provider) {
         injectedDataProvider = provider;
     }
 
+    /**
+     * Main interface used by the UI to request current, historical, trend,
+     * summary, and forecast data.
+     */
     private DashboardDataProvider dataProvider;
 
+    /**
+     * Displays current system state such as Live, Cached, Stale, Loading, or Error.
+     */
     private Label statusLabel;
+
+    /**
+     * Displays timestamp for the most recent weather reading.
+     */
     private Label timestampLabel;
+
+    /**
+     * Displays high/low temperatures for the daily chart data.
+     */
     private Label dailyHighLowLabel;
+
+    /**
+     * Dynamic title for the daily trend chart, including selected date.
+     */
     private Label dailyTrendLabel;
+
+    /**
+     * Dynamic title for the weekly trend chart, including selected 7-day range.
+     */
     private Label weeklyTrendLabel;
 
+    /**
+     * Current weather value cards.
+     *
+     * ValueCard is a reusable UI component that shows one label + one value.
+     */
     private ValueCard temperatureCard;
     private ValueCard feelsLikeCard;
     private ValueCard humidityCard;
@@ -58,28 +104,75 @@ public class WeatherDashboard extends Application {
     private ValueCard solarCard;
     private ValueCard rainfallCard;
 
+    /**
+     * Buttons for user-triggered actions.
+     */
     private Button refreshButton;
     private Button retryButton;
     private Button loadHistoryButton;
     private Button refreshForecastButton;
 
+    /**
+     * Date pickers for selecting the historical data range.
+     */
     private DatePicker startDatePicker;
     private DatePicker endDatePicker;
 
+    /**
+     * Table showing historical WeatherData rows.
+     */
     private TableView<WeatherData> historyTable;
+
+    /**
+     * Observable list backing the history table.
+     *
+     * JavaFX automatically refreshes the table when this list changes.
+     */
     private ObservableList<WeatherData> historyItems;
 
+    /**
+     * Table showing forecast rows.
+     */
     private TableView<ForecastEntry> forecastTable;
+
+    /**
+     * Observable list backing the forecast table.
+     */
     private ObservableList<ForecastEntry> forecastItems;
 
+    /**
+     * Custom chart for one selected day.
+     */
     private WeatherTrendChart dailyTrendChart;
+
+    /**
+     * Custom chart for seven-day trend.
+     */
     private WeatherTrendChart weeklyTrendChart;
 
+    /**
+     * Formatter used in the forecast table.
+     */
     private final DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+
+    /**
+     * Shorter formatter used in chart labels.
+     */
     private final DateTimeFormatter shortDateFormatter = DateTimeFormatter.ofPattern("M/d/yyyy");
 
+    /**
+     * JavaFX application startup method.
+     *
+     * Builds the UI, connects a DashboardDataProvider, then loads initial data.
+     */
     @Override
     public void start(Stage stage) {
+        /*
+         * Prefer the provider injected by Main.
+         *
+         * If no provider was injected, create the default composition here so
+         * WeatherDashboard can still run independently.
+         */
         DashboardDataProvider injected = injectedDataProvider;
         injectedDataProvider = null;
 
@@ -91,27 +184,45 @@ public class WeatherDashboard extends Application {
             dataProvider = composition.createDashboardDataProvider();
         }
 
+        /*
+         * BorderPane gives the dashboard a simple layout:
+         * - top = status + current weather cards
+         * - center = history table + analysis/forecast area
+         */
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(16));
         root.setTop(buildTopSection());
         root.setCenter(buildCenterSection());
 
+        // Set initial date picker values before requesting history data.
         initializeDefaults();
 
+        // Create and display the JavaFX window.
         Scene scene = new Scene(root, 1500, 940);
         stage.setTitle("SJSU Weather Dashboard");
         stage.setScene(scene);
         stage.show();
 
+        // Initial data load when the dashboard opens.
         refreshLiveWeather();
         loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
         loadForecast();
         loadTrendViews();
     }
 
+    /**
+     * Builds the top portion of the dashboard.
+     *
+     * Includes:
+     * - status bar
+     * - last updated timestamp
+     * - Refresh/Retry buttons
+     * - current weather cards
+     */
     private VBox buildTopSection() {
         VBox root = new VBox(12);
 
+        // Horizontal status bar across the top.
         HBox statusBar = new HBox(12);
         statusBar.setAlignment(Pos.CENTER_LEFT);
         statusBar.setPadding(new Insets(12));
@@ -124,18 +235,25 @@ public class WeatherDashboard extends Application {
         refreshButton = new Button("Refresh");
         retryButton = new Button("Retry");
 
+        // Both buttons use the same reload workflow.
         refreshButton.setOnAction(e -> handleRetry());
         retryButton.setOnAction(e -> handleRetry());
 
+        /*
+         * Spacer consumes extra horizontal space so the buttons stay on the
+         * right side of the status bar.
+         */
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
 
         statusBar.getChildren().addAll(statusLabel, timestampLabel, spacer, refreshButton, retryButton);
 
+        // Grid for current weather cards.
         GridPane cards = new GridPane();
         cards.setHgap(10);
         cards.setVgap(10);
 
+        // Cards are initialized with "--" until data loads.
         temperatureCard = new ValueCard("Temperature", "--");
         feelsLikeCard = new ValueCard("Feels Like", "--");
         humidityCard = new ValueCard("Humidity", "--");
@@ -143,6 +261,7 @@ public class WeatherDashboard extends Application {
         solarCard = new ValueCard("Solar", "--");
         rainfallCard = new ValueCard("Rainfall", "--");
 
+        // Arrange cards in two rows.
         cards.add(temperatureCard, 0, 0);
         cards.add(feelsLikeCard, 1, 0);
         cards.add(humidityCard, 2, 0);
@@ -154,6 +273,12 @@ public class WeatherDashboard extends Application {
         return root;
     }
 
+    /**
+     * Builds the center split pane.
+     *
+     * Left side: historical table.
+     * Right side: charts and forecast.
+     */
     private SplitPane buildCenterSection() {
         SplitPane split = new SplitPane();
         split.getItems().addAll(buildHistoryPane(), buildAnalysisPane());
@@ -161,6 +286,11 @@ public class WeatherDashboard extends Application {
         return split;
     }
 
+    /**
+     * Builds the historical data section.
+     *
+     * Includes date pickers, Load History button, and the history table.
+     */
     private VBox buildHistoryPane() {
         VBox root = new VBox(10);
 
@@ -170,11 +300,17 @@ public class WeatherDashboard extends Application {
         loadHistoryButton = new Button("Load History");
         loadHistoryButton.setOnAction(e -> loadSelectedHistory());
 
+        /*
+         * Table setup:
+         * historyItems is the observable backing list.
+         * configureHistoryTable defines columns and value mapping.
+         */
         historyTable = new TableView<>();
         historyItems = FXCollections.observableArrayList();
         historyTable.setItems(historyItems);
         configureHistoryTable();
 
+        // Date selector controls.
         HBox controls = new HBox(8);
         controls.setAlignment(Pos.CENTER_LEFT);
         controls.getChildren().addAll(
@@ -192,12 +328,23 @@ public class WeatherDashboard extends Application {
         return root;
     }
 
+    /**
+     * Builds the analysis section.
+     *
+     * Includes daily/weekly charts, high-low label, forecast refresh button,
+     * and forecast table.
+     */
     private VBox buildAnalysisPane() {
         VBox root = new VBox(10);
 
         dailyTrendLabel = new Label("Daily Temperature Trend");
         weeklyTrendLabel = new Label("Weekly Temperature Trend");
 
+        /*
+         * Charts are metric-based.
+         * Current dashboard uses temperature, but WeatherTrendChart can support
+         * other WeatherMetric values too.
+         */
         dailyTrendChart = new WeatherTrendChart(600, 200);
         dailyTrendChart.setMetric(WeatherMetric.TEMPERATURE);
 
@@ -209,6 +356,7 @@ public class WeatherDashboard extends Application {
         refreshForecastButton = new Button("Refresh Forecast");
         refreshForecastButton.setOnAction(e -> loadForecast());
 
+        // Forecast table setup.
         forecastTable = new TableView<>();
         forecastItems = FXCollections.observableArrayList();
         forecastTable.setItems(forecastItems);
@@ -227,6 +375,11 @@ public class WeatherDashboard extends Application {
         return root;
     }
 
+    /**
+     * Configures columns for the historical weather table.
+     *
+     * Each column extracts one value from WeatherData and formats it for display.
+     */
     private void configureHistoryTable() {
         TableColumn<WeatherData, String> timestampCol = new TableColumn<>("Timestamp");
         timestampCol.setCellValueFactory(cell ->
@@ -261,6 +414,11 @@ public class WeatherDashboard extends Application {
         );
     }
 
+    /**
+     * Configures columns for the forecast table.
+     *
+     * Forecast rows come from ForecastEntry objects generated by the forecast subsystem.
+     */
     private void configureForecastTable() {
         TableColumn<ForecastEntry, String> dateCol = new TableColumn<>("Date");
         dateCol.setCellValueFactory(cell ->
@@ -277,12 +435,20 @@ public class WeatherDashboard extends Application {
         forecastTable.getColumns().setAll(dateCol, tempCol, confidenceCol);
     }
 
+    /**
+     * Sets initial date picker values.
+     *
+     * Default is the last 5 days ending today.
+     */
     private void initializeDefaults() {
         LocalDate today = LocalDate.now();
         startDatePicker.setValue(today.minusDays(5));
         endDatePicker.setValue(today);
     }
 
+    /**
+     * Validates date picker values before loading history.
+     */
     private void loadSelectedHistory() {
         LocalDate start = startDatePicker.getValue();
         LocalDate end = endDatePicker.getValue();
@@ -300,6 +466,11 @@ public class WeatherDashboard extends Application {
         loadHistory(start, end);
     }
 
+    /**
+     * Loads the most recent weather reading for the current weather cards.
+     *
+     * Uses a JavaFX Task so data retrieval does not block the UI thread.
+     */
     public void refreshLiveWeather() {
         if (dataProvider == null) {
             return;
@@ -323,6 +494,14 @@ public class WeatherDashboard extends Application {
         runInBackground(task);
     }
 
+    /**
+     * Loads historical data for the selected date range.
+     *
+     * Also updates chart data:
+     * - Table shows full selected range.
+     * - Daily chart shows selected end date only.
+     * - Weekly chart shows 7-day window ending on selected end date.
+     */
     public void loadHistory(LocalDate start, LocalDate end) {
         if (dataProvider == null) {
             return;
@@ -336,6 +515,7 @@ public class WeatherDashboard extends Application {
         };
 
         task.setOnSucceeded(e -> {
+            // Full selected date range goes into the historical table.
             List<WeatherData> selectedRange = task.getValue();
             historyItems.setAll(selectedRange);
 
@@ -357,11 +537,13 @@ public class WeatherDashboard extends Application {
             LocalDate dailyDate = end;
             LocalDate weekStart = end.minusDays(6);
 
+            // Select only records from the selected end date.
             List<WeatherData> dailyData = selectedRange.stream()
                     .filter(w -> w.getTimestamp() != null)
                     .filter(w -> w.getTimestamp().toLocalDate().equals(dailyDate))
                     .collect(Collectors.toList());
 
+            // Select records from the 7-day window ending on the selected end date.
             List<WeatherData> weeklyData = selectedRange.stream()
                     .filter(w -> w.getTimestamp() != null)
                     .filter(w -> {
@@ -370,9 +552,11 @@ public class WeatherDashboard extends Application {
                     })
                     .collect(Collectors.toList());
 
+            // Push filtered data into the custom chart components.
             dailyTrendChart.setData(dailyData);
             weeklyTrendChart.setData(weeklyData);
 
+            // Update chart titles and high/low label to match displayed chart data.
             updateTrendLabels(dailyDate, weekStart, end);
             updateHighLowForDailyData(dailyData);
         });
@@ -382,6 +566,12 @@ public class WeatherDashboard extends Application {
         runInBackground(task);
     }
 
+    /**
+     * Loads forecast entries into the forecast table.
+     *
+     * Forecast data comes from DashboardDataProvider, which delegates to the
+     * forecast/cache subsystem.
+     */
     public void loadForecast() {
         if (dataProvider == null) {
             return;
@@ -400,6 +590,12 @@ public class WeatherDashboard extends Application {
         runInBackground(task);
     }
 
+    /**
+     * Loads default trend views from the data provider.
+     *
+     * This is used during startup. The provider decides what "daily" and
+     * "weekly" mean by default, usually based on the latest available dataset date.
+     */
     public void loadTrendViews() {
         if (dataProvider == null) {
             return;
@@ -412,6 +608,10 @@ public class WeatherDashboard extends Application {
                 List<WeatherData> weekly = dataProvider.getWeeklyTrend();
                 DailySummary summary = dataProvider.getDailySummary();
 
+                /*
+                 * UI updates must run on the JavaFX Application Thread.
+                 * Platform.runLater schedules the chart/label changes safely.
+                 */
                 Platform.runLater(() -> {
                     dailyTrendChart.setData(daily);
                     weeklyTrendChart.setData(weekly);
@@ -436,6 +636,9 @@ public class WeatherDashboard extends Application {
         runInBackground(task);
     }
 
+    /**
+     * Updates chart labels to show the exact date/range being plotted.
+     */
     private void updateTrendLabels(LocalDate dailyDate, LocalDate weekStart, LocalDate weekEnd) {
         dailyTrendLabel.setText(
                 "Daily Temperature Trend (" + dailyDate.format(shortDateFormatter) + ")"
@@ -450,6 +653,9 @@ public class WeatherDashboard extends Application {
         );
     }
 
+    /**
+     * Updates the high/low summary for the daily chart.
+     */
     private void updateHighLowForDailyData(List<WeatherData> dailyData) {
         if (dailyData == null || dailyData.isEmpty()) {
             dailyHighLowLabel.setText("Daily High/Low: --");
@@ -473,12 +679,16 @@ public class WeatherDashboard extends Application {
         ));
     }
 
+    /**
+     * Updates current weather cards and status display.
+     */
     public void updateCurrentWeather(WeatherData data) {
         if (data == null) {
             setStatus(SystemStatus.ERROR, "No weather data available");
             return;
         }
 
+        // Update card values with units.
         temperatureCard.setValue(format(data.getTemperature()) + " °F");
         feelsLikeCard.setValue(format(data.getFeelsLike()) + " °F");
         humidityCard.setValue(format(data.getHumidity()) + " %");
@@ -488,11 +698,13 @@ public class WeatherDashboard extends Application {
 
         timestampLabel.setText("Last updated: " + data.getFormattedTimestamp());
 
+        // Null status is treated as live data by default.
         SystemStatus status = data.getStatus();
         if (status == null) {
             status = SystemStatus.LIVE;
         }
 
+        // Convert SystemStatus enum into user-facing status message.
         switch (status) {
             case STALE:
                 setStatus(SystemStatus.STALE, "Data is stale");
@@ -513,28 +725,47 @@ public class WeatherDashboard extends Application {
         }
     }
 
+    /**
+     * Handles Refresh/Retry actions.
+     *
+     * Reloads the current weather, selected history range, and forecast.
+     */
     public void handleRetry() {
         refreshLiveWeather();
         loadHistory(startDatePicker.getValue(), endDatePicker.getValue());
         loadForecast();
     }
 
+    /**
+     * Runs a JavaFX Task on a background daemon thread.
+     *
+     * This keeps the UI responsive while data is loading.
+     */
     private void runInBackground(Task<?> task) {
         Thread thread = new Thread(task);
         thread.setDaemon(true);
         thread.start();
     }
 
+    /**
+     * Extracts a safe error message from a failed Task.
+     */
     private String getErrorMessage(Task<?> task) {
         return task.getException() == null
                 ? "Unknown error"
                 : task.getException().getMessage();
     }
 
+    /**
+     * Formats numeric values to two decimal places.
+     */
     private String format(double value) {
         return String.format("%.2f", value);
     }
 
+    /**
+     * Updates the status label text and color based on SystemStatus.
+     */
     private void setStatus(SystemStatus status, String message) {
         statusLabel.setText("Status: " + message);
 
@@ -562,6 +793,9 @@ public class WeatherDashboard extends Application {
         statusLabel.setStyle(style);
     }
 
+    /**
+     * Shows a JavaFX error dialog.
+     */
     private void showError(String msg) {
         Alert alert = new Alert(Alert.AlertType.ERROR);
         alert.setHeaderText("Weather Dashboard Error");

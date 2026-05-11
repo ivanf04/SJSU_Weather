@@ -9,7 +9,14 @@ package com.weather.app;
  */
 public class DailySummary {
 
+    /**
+     * Highest temperature recorded for the day.
+     */
     private final double highTemp;
+
+    /**
+     * Lowest temperature recorded for the day.
+     */
     private final double lowTemp;
 
     /**
@@ -20,14 +27,23 @@ public class DailySummary {
         this.lowTemp = lowTemp;
     }
 
+    /**
+     * Returns high temperature for the day.
+     */
     public double getHighTemp() {
         return highTemp;
     }
 
+    /**
+     * Returns low temperature for the day.
+     */
     public double getLowTemp() {
         return lowTemp;
     }
 
+    /**
+     * Useful for debugging/logging summary values.
+     */
     @Override
     public String toString() {
         return "DailySummary{" +

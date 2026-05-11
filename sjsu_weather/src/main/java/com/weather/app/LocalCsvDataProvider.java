@@ -16,27 +16,70 @@ import java.util.stream.Collectors;
 /**
  * Reads weather data from a local CSV file and provides it to the dashboard.
  *
+ * This class connects the stored CSV data to the UI/application layer.
+ *
+ * Main responsibilities:
+ * - read the local CSV backup file
+ * - convert raw CSV rows into typed WeatherData objects
+ * - filter data by date range
+ * - provide daily and weekly trend data
+ * - compute daily high/low summary
+ * - delegate forecast generation/caching to ArchiveClass
+ *
  * Uses CsvWeatherSchema so it is not tied to a specific CSV format.
  */
 public class LocalCsvDataProvider implements DashboardDataProvider {
 
+    /**
+     * Timestamp format with seconds, used by most SJSU CSV rows.
+     */
     private static final DateTimeFormatter TS_SPACE_SEC =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
+    /**
+     * Timestamp format without seconds.
+     *
+     * Kept as a fallback so slightly different timestamp formats do not break parsing.
+     */
     private static final DateTimeFormatter TS_SPACE_MIN =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
+    /**
+     * If the newest record is older than this many hours,
+     * current weather is marked STALE instead of LIVE.
+     */
     private static final int STALE_THRESHOLD_HOURS = 2;
 
+    /**
+     * Path to the local CSV file.
+     */
     private final String csvFile;
+
+    /**
+     * Defines which CSV columns map to timestamp, temperature, humidity, etc.
+     */
     private final CsvWeatherSchema schema;
+
+    /**
+     * Forecast facade used to retrieve cached or newly generated forecasts.
+     */
     private final ArchiveClass archiveClass;
 
     /**
-     * Cache parsed CSV rows so we don't reread file multiple times per refresh
+     * Cache parsed CSV rows so we don't reread file multiple times per refresh.
+     *
+     * This improves performance because several dashboard sections may request
+     * data during the same UI refresh.
      */
     private List<WeatherData> cachedRecords;
 
+    /**
+     * Creates a data provider backed by a local CSV file.
+     *
+     * @param csvFile path to local CSV file
+     * @param schema CSV column mapping
+     * @param forecastArchive forecast facade/cache subsystem
+     */
     public LocalCsvDataProvider(String csvFile,
                                 CsvWeatherSchema schema,
                                 ArchiveClass forecastArchive) {
@@ -45,6 +88,9 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         this.archiveClass = forecastArchive;
     }
 
+    /**
+     * Returns the latest weather reading for the dashboard cards.
+     */
     @Override
     public WeatherData getCurrentWeather() {
         List<WeatherData> all = getAllRecords();
@@ -55,6 +101,7 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
 
         WeatherData latest = all.get(all.size() - 1);
 
+        // Mark data stale if it is too old compared with the system clock.
         if (latest.getTimestamp() != null &&
                 latest.getTimestamp().isBefore(LocalDateTime.now().minusHours(STALE_THRESHOLD_HOURS))) {
             return rebuildWithStatus(latest, SystemStatus.STALE);
@@ -63,6 +110,11 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return rebuildWithStatus(latest, SystemStatus.LIVE);
     }
 
+    /**
+     * Returns all records between the selected start and end dates.
+     *
+     * Used by the historical table in the dashboard.
+     */
     @Override
     public List<WeatherData> getHistoricalWeather(LocalDate startDate, LocalDate endDate) {
         return getAllRecords().stream()
@@ -74,6 +126,12 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns weather readings for the latest available date in the dataset.
+     *
+     * This is better than using LocalDate.now() because the CSV may contain
+     * historical/offline data that does not match the current system date.
+     */
     @Override
     public List<WeatherData> getDailyTrend() {
         LocalDate latest = getLatestDate();
@@ -84,6 +142,9 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns weather readings for the 7-day window ending on the latest dataset date.
+     */
     @Override
     public List<WeatherData> getWeeklyTrend() {
         LocalDate latest = getLatestDate();
@@ -98,6 +159,9 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Computes high and low temperature for the latest daily trend.
+     */
     @Override
     public DailySummary getDailySummary() {
         List<WeatherData> today = getDailyTrend();
@@ -119,20 +183,25 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return new DailySummary(high, low);
     }
 
+    /**
+     * Retrieves forecast entries using the forecast/archive subsystem.
+     */
     @Override
     public List<ForecastEntry> getForecast() {
         return archiveClass.getForecast(getAllRecords());
     }
 
     /**
-     * Allows manual refresh if CSV updates
+     * Allows manual refresh if CSV updates.
+     *
+     * Clearing cachedRecords forces the next request to reread the CSV.
      */
     public void refreshCache() {
         cachedRecords = null;
     }
 
     /**
-     * Returns cached records or loads them if needed
+     * Returns cached records or loads them if needed.
      */
     private List<WeatherData> getAllRecords() {
         if (cachedRecords == null) {
@@ -142,7 +211,9 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
     }
 
     /**
-     * Get latest date from dataset instead of system clock
+     * Get latest date from dataset instead of system clock.
+     *
+     * This makes charts work correctly even when showing historical datasets.
      */
     private LocalDate getLatestDate() {
         List<WeatherData> all = getAllRecords();
@@ -151,20 +222,26 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return all.get(all.size() - 1).getTimestamp().toLocalDate();
     }
 
+    /**
+     * Reads the CSV file and converts each row into WeatherData.
+     */
     private List<WeatherData> parseAllRecords() {
         List<WeatherData> result = new ArrayList<>();
 
+        // If CSV does not exist yet, return empty data instead of crashing.
         if (!Files.exists(Paths.get(csvFile))) {
             return result;
         }
 
         try (BufferedReader reader = new BufferedReader(new FileReader(csvFile))) {
 
+            // First line contains column names.
             String headerLine = reader.readLine();
             if (headerLine == null) {
                 return result;
             }
 
+            // Remove UTF-8 BOM if present at beginning of file.
             if (headerLine.startsWith("\uFEFF")) {
                 headerLine = headerLine.substring(1);
             }
@@ -179,11 +256,13 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
 
                 WeatherRecord record = new WeatherRecord();
 
+                // Convert CSV row into key-value WeatherRecord.
                 for (int i = 0; i < headers.length; i++) {
                     record.setValue(headers[i].trim(),
                             i < cols.length ? cols[i].trim() : "");
                 }
 
+                // Convert raw record into typed application model.
                 WeatherData data = toWeatherData(record);
                 if (data != null) {
                     result.add(data);
@@ -197,6 +276,9 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return result;
     }
 
+    /**
+     * Converts one raw WeatherRecord into one structured WeatherData object.
+     */
     private WeatherData toWeatherData(WeatherRecord record) {
 
         LocalDateTime timestamp = parseTimestamp(
@@ -204,6 +286,7 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
 
         if (timestamp == null) return null;
 
+        // Read numeric values using schema instead of hardcoded column names.
         double temperature = parseDouble(record.getValue(schema.getTemperatureColumn()));
         double humidity = parseDouble(record.getValue(schema.getHumidityColumn()));
         double wind = parseDouble(record.getValue(schema.getWindSpeedColumn()));
@@ -225,22 +308,30 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         );
     }
 
+    /**
+     * Parses timestamps using several supported formats.
+     *
+     * Returns null if timestamp cannot be parsed.
+     */
     private static LocalDateTime parseTimestamp(String tsStr) {
         if (tsStr == null) return null;
 
         String t = tsStr.trim();
         if (t.isEmpty()) return null;
 
+        // Try timestamp formats used by CSV files.
         for (DateTimeFormatter fmt : new DateTimeFormatter[]{TS_SPACE_SEC, TS_SPACE_MIN}) {
             try {
                 return LocalDateTime.parse(t, fmt);
             } catch (DateTimeParseException ignored) {}
         }
 
+        // Try ISO local date-time as fallback.
         try {
             return LocalDateTime.parse(t, DateTimeFormatter.ISO_LOCAL_DATE_TIME);
         } catch (DateTimeParseException ignored) {}
 
+        // Try date-only format as final fallback.
         try {
             return LocalDate.parse(t).atStartOfDay();
         } catch (DateTimeParseException ignored) {}
@@ -248,8 +339,17 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return null;
     }
 
+    /**
+     * Computes "feels like" temperature in Fahrenheit.
+     *
+     * Uses:
+     * - heat index when hot/humid
+     * - wind chill when cold/windy
+     * - actual temperature otherwise
+     */
     private double computeFeelsLikeFahrenheit(double tempF, double humidity, double windMph) {
 
+        // Heat index formula for hot and humid conditions.
         if (tempF >= 80 && humidity >= 40) {
             return -42.379
                     + 2.04901523 * tempF
@@ -262,6 +362,7 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
                     - 0.00000199 * tempF * tempF * humidity * humidity;
         }
 
+        // Wind chill formula for cold and windy conditions.
         if (tempF <= 50 && windMph > 3) {
             return 35.74
                     + 0.6215 * tempF
@@ -272,6 +373,11 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         return tempF;
     }
 
+    /**
+     * Safely parses numeric CSV values.
+     *
+     * Returns 0.0 if parsing fails.
+     */
     private double parseDouble(String value) {
         try {
             return Double.parseDouble(value);
@@ -280,6 +386,12 @@ public class LocalCsvDataProvider implements DashboardDataProvider {
         }
     }
 
+    /**
+     * Creates a copy of WeatherData with a new SystemStatus.
+     *
+     * Used so the same weather reading can be labeled LIVE or STALE
+     * without mutating the original immutable object.
+     */
     private WeatherData rebuildWithStatus(WeatherData source, SystemStatus status) {
         return new WeatherData(
                 source.getTemperature(),

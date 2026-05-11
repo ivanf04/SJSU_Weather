@@ -16,10 +16,15 @@ import com.google.gson.JsonSerializer;
 import com.google.gson.reflect.TypeToken;
 
 /**
+ * Reads and writes a single CacheEntry to/from a JSON file.
  *
- * Read and write a single CacheEntry to/from a JSON file.
- * This class knows about the file system and JSON serialisation.
+ * This class knows about:
+ * - file system access
+ * - JSON serialization
+ * - JSON deserialization
  *
+ * It does NOT generate forecasts itself.
+ * It only persists forecast results.
  *
  * File format (forecast_cache.json):
  * {
@@ -29,7 +34,6 @@ import com.google.gson.reflect.TypeToken;
  *     ...
  *   ]
  * }
-
  */
 public class ForecastCache {
 

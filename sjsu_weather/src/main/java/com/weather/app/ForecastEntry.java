@@ -39,26 +39,38 @@ public class ForecastEntry {
         this.confidenceLabel = confidenceLabel;
     }
 
+    /**
+     * Returns the date this forecast applies to.
+     */
     public LocalDate getDate() {
         return date;
     }
 
+    /**
+     * Returns predicted temperature.
+     */
     public double getPredictedTemperature() {
         return predictedTemperature;
     }
 
+    /**
+     * Returns forecast confidence label.
+     */
     public String getConfidenceLabel() {
         return confidenceLabel;
     }
 
     /**
      * Returns a formatted string for UI display.
-     * Example: "72.5"
+     * Example: "72.50"
      */
     public String getFormattedTemperature() {
         return String.format("%.2f", predictedTemperature);
     }
 
+    /**
+     * Useful for debugging/logging forecast entries.
+     */
     @Override
     public String toString() {
         return "ForecastEntry{" +
